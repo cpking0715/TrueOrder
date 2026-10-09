@@ -15,8 +15,12 @@
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
+  },
   "devDependencies": {
-    "@testing-library/vue": "^11.0.0",
+    "@eslint/js": "^9.17.0",
+    "@testing-library/vue": "^8.1.0",
     "@types/node": "^24.0.0",
     "@vitejs/plugin-vue": "^6.0.0",
     "eslint": "^9.17.0",

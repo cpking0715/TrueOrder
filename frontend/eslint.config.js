@@ -2,11 +2,32 @@ import js from "@eslint/js";
 import pluginVue from "eslint-plugin-vue";
 import tseslint from "typescript-eslint";
 
+const browserGlobals = {
+  console: "readonly",
+  document: "readonly",
+  fetch: "readonly",
+  window: "readonly",
+  Event: "readonly",
+  File: "readonly",
+  FormData: "readonly",
+  HTMLElement: "readonly",
+  HTMLInputElement: "readonly",
+  HTMLSelectElement: "readonly",
+  URL: "readonly",
+  URLSearchParams: "readonly",
+};
+
 export default tseslint.config(
   { ignores: ["dist", "node_modules", "src/api/schema.d.ts"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   ...pluginVue.configs["flat/recommended"],
+  {
+    files: ["**/*.ts", "**/*.vue"],
+    languageOptions: {
+      globals: browserGlobals,
+    },
+  },
   {
     files: ["**/*.vue"],
     languageOptions: {

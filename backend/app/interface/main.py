@@ -34,7 +34,8 @@ def create_app() -> FastAPI:
 
 def _mount_frontend(app: FastAPI) -> None:
     """存在构建产物时由后端直接托管（hash 路由，无需 SPA 回退）。"""
-    dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+    # app/interface/main.py → 仓库根/frontend/dist
+    dist = Path(__file__).resolve().parents[3] / "frontend" / "dist"
     if not (dist / "index.html").exists():
         return
     assets = dist / "assets"
