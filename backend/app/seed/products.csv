@@ -1,0 +1,3 @@
+code,name,description,buyer_type,hs_code,audience,note,buyer_keywords,peer_keywords
+P-GARMENT,女士棉质长裤（成衣）,自营出口的成衣产品，卖给海外进口商/批发商/品牌,importer,620462,importer,成衣税号：女士棉质裤,APPAREL;CLOTHING;TRADING;WHOLESALE;FASHION;WEAR;IMPORT,GARMENT FACTORY;APPAREL MANUFACTUR;SEWING FACTORY
+P-BOARD,瓦楞纸板（原纸）,纸板卖给海外纸壳厂（制箱厂）作生产原料,factory,480810,factory,税号用瓦楞纸板原纸 480810，不是纸箱成品 4819——工厂买的是原料，不是随成品进来的包装,PACKAGING;CARTON;CORRUGATED;BOX;PAPER;CONVERT,PAPER MILL;BOARD MILL;PULP MILL

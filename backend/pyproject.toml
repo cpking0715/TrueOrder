@@ -1,0 +1,51 @@
+[project]
+name = "trueorder-backend"
+version = "0.1.0"
+description = "Add your description here"
+authors = [
+    { name = "cpking0715", email = "1396920681@qq.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.143.0",
+    "psycopg[binary]>=3.3.6",
+    "pydantic-settings>=2.15.0",
+    "python-multipart>=0.0.32",
+    "sqlalchemy>=2.0",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.scripts]
+trueorder-backend = "trueorder_backend:main"
+
+[build-system]
+requires = ["uv_build>=0.12.3,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+    "ruff>=0.16.10",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "smoke: e2e 冒烟，默认命令不跑，动主链路时手动 uv run pytest -q -m smoke",
+]
+addopts = "-m 'not smoke'"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI 依赖注入的标准写法是 Depends(...) 作为参数默认值
+"app/interface/**" = ["B008"]
+# 内嵌 CSV fixture 的行宽由数据决定，不做代码折行
+"tests/infra/test_importer.py" = ["E501"]
+"tests/interface/test_api.py" = ["E501"]

@@ -1,0 +1,229 @@
+"""界面查询：买家列表（FTS + 筛选）、产品计数、公司抽屉详情。"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import date
+
+from sqlalchemy import ColumnElement, func, select
+from sqlalchemy.orm import Session
+
+from app.infrastructure.orm import (
+    CompanyORM,
+    CompanyScoreORM,
+    ProductHsCodeORM,
+    ProductORM,
+    RawBillORM,
+)
+
+
+@dataclass
+class BuyerQueryFilters:
+    product_id: int
+    audience: str  # importer / factory
+    tier: str | None = None  # potential / precise / excluded；None = 全部
+    q: str | None = None  # PostgreSQL 全文检索
+    country: str | None = None
+    min_shipments: int | None = None
+    order: str = "shipments"  # shipments | last_arrival | name
+    limit: int = 50
+    offset: int = 0
+
+
+@dataclass
+class BuyerRow:
+    company_id: int
+    name: str
+    normalized_name: str
+    country: str
+    city: str
+    same_name_conflict: bool
+    tier: str
+    exclusion_code: str | None
+    shipments: int
+    last_arrival: date | None
+    suppliers: list[str]
+    reasons: list[dict]
+
+
+@dataclass
+class CompanyDetail:
+    company: dict
+    scores: list[dict] = field(default_factory=list)
+    bills: list[dict] = field(default_factory=list)
+
+
+def _fts_condition(q: str) -> ColumnElement[bool] | None:
+    query = (q or "").strip()
+    if not query:
+        return None
+    ts_query = func.websearch_to_tsquery("simple", query)
+    return CompanyORM.search_vector.op("@@")(ts_query)
+
+
+class SqlBuyerQueries:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def query_buyers(self, f: BuyerQueryFilters) -> tuple[list[BuyerRow], int]:
+        stmt = (
+            select(CompanyScoreORM, CompanyORM)
+            .join(CompanyORM, CompanyScoreORM.company_id == CompanyORM.id)
+            .where(
+                CompanyScoreORM.product_id == f.product_id,
+                CompanyScoreORM.audience == f.audience,
+            )
+        )
+        if f.tier:
+            stmt = stmt.where(CompanyScoreORM.tier == f.tier)
+        if f.country:
+            stmt = stmt.where(CompanyORM.country == f.country.upper())
+        if f.min_shipments:
+            stmt = stmt.where(CompanyScoreORM.shipments >= f.min_shipments)
+        fts = _fts_condition(f.q or "")
+        if fts is not None:
+            stmt = stmt.where(fts)
+
+        total = self._session.scalar(
+            select(func.count()).select_from(stmt.subquery())
+        ) or 0
+
+        if f.order == "last_arrival":
+            stmt = stmt.order_by(
+                func.coalesce(CompanyScoreORM.last_arrival, date(1970, 1, 1)).desc()
+            )
+        elif f.order == "name":
+            stmt = stmt.order_by(CompanyORM.normalized_name.asc())
+        else:
+            stmt = stmt.order_by(
+                CompanyScoreORM.shipments.desc(), CompanyORM.normalized_name.asc()
+            )
+
+        rows = self._session.execute(stmt.limit(f.limit).offset(f.offset)).all()
+        items = [
+            BuyerRow(
+                company_id=company.id,
+                name=(company.name_variants or [company.normalized_name])[0],
+                normalized_name=company.normalized_name,
+                country=company.country,
+                city=company.city_guess or "",
+                same_name_conflict=bool(company.same_name_conflict),
+                tier=score.tier,
+                exclusion_code=score.exclusion_code,
+                shipments=score.shipments,
+                last_arrival=score.last_arrival,
+                suppliers=list(score.suppliers or []),
+                reasons=list(score.reasons or []),
+            )
+            for score, company in rows
+        ]
+        return items, int(total)
+
+    def product_tier_counts(self) -> dict[int, dict[str, int]]:
+        rows = self._session.execute(
+            select(
+                CompanyScoreORM.product_id,
+                CompanyScoreORM.tier,
+                func.count(),
+            ).group_by(CompanyScoreORM.product_id, CompanyScoreORM.tier)
+        ).all()
+        counts: dict[int, dict[str, int]] = {}
+        for product_id, tier, n in rows:
+            counts.setdefault(product_id, {})[tier] = int(n)
+        return counts
+
+    def list_products_with_counts(self) -> list[dict]:
+        counts = self.product_tier_counts()
+        products = self._session.execute(
+            select(
+                ProductORM,
+                ProductHsCodeORM.hs_code,
+                ProductHsCodeORM.audience,
+                ProductHsCodeORM.note,
+            )
+            .outerjoin(ProductHsCodeORM, ProductHsCodeORM.product_id == ProductORM.id)
+            .order_by(ProductORM.id, ProductHsCodeORM.id)
+        ).all()
+        by_id: dict[int, dict] = {}
+        for product, hs_code, audience, note in products:
+            entry = by_id.setdefault(
+                product.id,
+                {
+                    "product_id": product.id,
+                    "code": product.code,
+                    "name": product.name,
+                    "description": product.description,
+                    "buyer_type": product.buyer_type,
+                    "hs_codes": [],
+                    "counts": counts.get(product.id, {}),
+                },
+            )
+            if hs_code:
+                entry["hs_codes"].append(
+                    {"hs_code": hs_code, "audience": audience, "note": note or ""}
+                )
+        return list(by_id.values())
+
+    def company_detail(
+        self, company_id: int, product_id: int | None = None
+    ) -> CompanyDetail | None:
+        company = self._session.get(CompanyORM, company_id)
+        if company is None:
+            return None
+        detail = CompanyDetail(
+            company={
+                "company_id": company.id,
+                "name": (company.name_variants or [company.normalized_name])[0],
+                "name_variants": list(company.name_variants or []),
+                "normalized_name": company.normalized_name,
+                "country": company.country,
+                "city": company.city_guess or "",
+                "address": company.address_guess or "",
+                "same_name_conflict": bool(company.same_name_conflict),
+            }
+        )
+
+        score_stmt = select(CompanyScoreORM).where(CompanyScoreORM.company_id == company_id)
+        if product_id:
+            score_stmt = score_stmt.where(CompanyScoreORM.product_id == product_id)
+        for score in self._session.scalars(score_stmt.order_by(CompanyScoreORM.id)):
+            detail.scores.append(
+                {
+                    "product_id": score.product_id,
+                    "audience": score.audience,
+                    "tier": score.tier,
+                    "exclusion_code": score.exclusion_code,
+                    "reasons": list(score.reasons or []),
+                    "shipments": score.shipments,
+                    "last_arrival": score.last_arrival,
+                    "suppliers": list(score.suppliers or []),
+                }
+            )
+
+        bills = self._session.scalars(
+            select(RawBillORM)
+            .where(
+                (RawBillORM.consignee_company_id == company_id)
+                | (RawBillORM.shipper_company_id == company_id)
+            )
+            .order_by(RawBillORM.arrival_date.desc(), RawBillORM.id.desc())
+            .limit(500)
+        )
+        for b in bills:
+            detail.bills.append(
+                {
+                    "bill_id": b.id,
+                    "arrival_date": b.arrival_date,
+                    "hs_code": b.hs_code,
+                    "hs_suspect": bool(b.hs_suspect),
+                    "origin_country": b.origin_country,
+                    "shipper": b.shipper_raw,
+                    "consignee": b.consignee_raw,
+                    "role": "shipper" if b.shipper_company_id == company_id else "consignee",
+                    "product_description": b.product_description,
+                    "port": b.port,
+                    "bill_number": b.bill_number,
+                    "quantity": b.quantity,
+                }
+            )
+        return detail
