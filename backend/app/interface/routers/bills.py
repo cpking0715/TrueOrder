@@ -36,10 +36,11 @@ async def import_bills_csv(
 def company_detail(
     company_id: int,
     product_id: int | None = None,
+    audience: str | None = None,
     queries: SqlBuyerQueries = Depends(get_buyer_queries),
 ):
-    """公司抽屉：票据、得分理由（带提单 id）、供货方。"""
-    detail = queries.company_detail(company_id, product_id=product_id)
+    """公司抽屉：票据、得分理由（带提单 id）、供货方。audience 过滤 both 产品的受众得分。"""
+    detail = queries.company_detail(company_id, product_id=product_id, audience=audience)
     if detail is None:
         raise HTTPException(status_code=404, detail=f"公司 {company_id} 不存在")
     return company_detail_to_out(detail)

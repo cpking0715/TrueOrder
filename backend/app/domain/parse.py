@@ -62,7 +62,11 @@ def parse_bill_row(row: dict, source: str, line_no: int) -> tuple[BillLine | Non
 
 
 def bill_dedup_hash(line: BillLine) -> str:
-    """同一票重复导入的去重指纹：业务字段拼接后取 MD5。"""
+    """同一票重复导入的去重指纹：业务字段拼接后取 MD5。
+
+    原产国/港口/数量参与指纹，避免「同日同当事人同税号」的拼柜/分单被误合并；
+    货物描述完整参与（不截断），法律后缀已随名称归一化折叠。
+    """
     payload = "|".join(
         (
             line.arrival_date.isoformat(),
@@ -70,7 +74,10 @@ def bill_dedup_hash(line: BillLine) -> str:
             normalize_company_name(line.shipper_name),
             (line.hs_code or "").strip(),
             (line.bill_number or "").strip().upper(),
-            _squash_desc(line.product_description)[:80],
+            _squash_desc(line.product_description),
+            normalize_country(line.origin_country),
+            _squash_desc(line.port),
+            _squash_desc(line.quantity),
         )
     )
     return hashlib.md5(payload.encode("utf-8")).hexdigest()
@@ -113,11 +120,14 @@ def parse_product_rows(rows: list[dict], source: str) -> tuple[list[ProductConfi
                 "description": _cell(row, "description"),
                 "buyer_type": buyer_type,
                 "hs_rows": [],
-                "buyer_keywords": _split_keywords(_cell(row, "buyer_keywords")),
-                "peer_keywords": _split_keywords(_cell(row, "peer_keywords")),
+                "buyer_keywords": [],
+                "peer_keywords": [],
                 "first_line": line_no,
             },
         )
+        # both 产品多行（每受众一行）时，关键词跨行合并去重，不能只取首行
+        _merge_keywords(entry["buyer_keywords"], _cell(row, "buyer_keywords"))
+        _merge_keywords(entry["peer_keywords"], _cell(row, "peer_keywords"))
         entry["hs_rows"].append(
             {
                 "hs_code": hs_code,
@@ -149,6 +159,12 @@ def parse_product_rows(rows: list[dict], source: str) -> tuple[list[ProductConfi
 
 def _split_keywords(cell: str) -> list[str]:
     return [kw.strip().upper() for kw in (cell or "").replace(",", ";").split(";") if kw.strip()]
+
+
+def _merge_keywords(target: list[str], cell: str) -> None:
+    for keyword in _split_keywords(cell):
+        if keyword not in target:
+            target.append(keyword)
 
 
 def default_consignee_country(raw: str) -> str:

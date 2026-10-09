@@ -28,10 +28,11 @@ ORIGIN_ALLOWED = {"CN", "VN"}
 
 BLANK_PREFIXES = ("TO THE ORDER", "ORDER OF", "TO ORDER")
 BANK_TOKENS = {"BANK", "BANCO", "BANQUE"}
+# 单词级强特征；CARGO/LOGISTICS 一词过宽易误伤品牌名，不单独纳入（F6）
 FORWARDER_TOKENS = {
-    "FORWARDER", "FORWARDING", "FREIGHT", "NVOCC", "3PL", "LOGISTICS", "CARGO",
+    "FORWARDER", "FORWARDING", "FREIGHT", "NVOCC", "3PL",
     "EXPEDITORS", "KUEHNE", "NAGEL", "SCHENKER", "PANALPINA", "DSV", "CEVA",
-    "GEODIS", "YUSEN", "KINTETSU",
+    "GEODIS", "YUSEN", "KINTETSU", "LOGISTICS",
 }
 # 集团内部供货判定时，从名称两端剥离的地理词。
 GEO_TOKENS = {"USA", "US", "AMERICA", "CN", "CHINA", "VN", "VIETNAM", "HK", "HONGKONG", "OVERSEAS"}
@@ -159,7 +160,12 @@ def score_company(
 
     peer_hits = _matched_keywords(business_text, product.peer_keywords)
     buyer_hits = _matched_keywords(business_text, product.buyer_keywords)
-    if peer_hits and not buyer_hits:
+    # 被同行词覆盖的买家命中是伪命中：名称含 PAPER MILL 时命中的 PAPER
+    # 只是 PAPER MILL 的一部分，不构成独立的买家业务信号。
+    real_buyer_hits = tuple(
+        b for b in buyer_hits if not any(_squash(b) in _squash(p) for p in peer_hits)
+    )
+    if peer_hits and not real_buyer_hits:
         return _excluded(
             product, facts, audience, "EX_PEER_OVERSEAS",
             f"公司业务命中同行行业词（{'、'.join(peer_hits)}），疑似同行海外公司",
@@ -219,12 +225,12 @@ def score_company(
         )
 
     if product.buyer_keywords:
-        business_ok = bool(buyer_hits)
+        business_ok = bool(real_buyer_hits)
         if business_ok:
             reasons.append(
                 ScoreReason(
                     "BUSINESS_MATCH",
-                    f"公司业务匹配买家行业词（{'、'.join(buyer_hits)}）",
+                    f"公司业务匹配买家行业词（{'、'.join(real_buyer_hits)}）",
                     _bill_ids(qualifying),
                 )
             )

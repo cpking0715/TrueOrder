@@ -13,6 +13,7 @@ const browserGlobals = {
   HTMLElement: "readonly",
   HTMLInputElement: "readonly",
   HTMLSelectElement: "readonly",
+  setTimeout: "readonly",
   URL: "readonly",
   URLSearchParams: "readonly",
 };

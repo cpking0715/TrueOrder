@@ -119,21 +119,31 @@ class SqlBuyerQueries:
         ]
         return items, int(total)
 
-    def product_tier_counts(self) -> dict[int, dict[str, int]]:
+    def product_tier_counts(self) -> dict[int, dict[str, dict[str, int]]]:
+        """按 (product_id, audience) 分层的 tier 计数；both 产品两类受众不混加。"""
         rows = self._session.execute(
             select(
                 CompanyScoreORM.product_id,
+                CompanyScoreORM.audience,
                 CompanyScoreORM.tier,
                 func.count(),
-            ).group_by(CompanyScoreORM.product_id, CompanyScoreORM.tier)
+            ).group_by(CompanyScoreORM.product_id, CompanyScoreORM.audience, CompanyScoreORM.tier)
         ).all()
-        counts: dict[int, dict[str, int]] = {}
-        for product_id, tier, n in rows:
-            counts.setdefault(product_id, {})[tier] = int(n)
+        counts: dict[int, dict[str, dict[str, int]]] = {}
+        for product_id, audience, tier, n in rows:
+            counts.setdefault(product_id, {}).setdefault(audience, {})[tier] = int(n)
         return counts
 
+    @staticmethod
+    def _summed_counts(by_audience: dict[str, dict[str, int]]) -> dict[str, int]:
+        total: dict[str, int] = {}
+        for tier_counts in by_audience.values():
+            for tier, n in tier_counts.items():
+                total[tier] = total.get(tier, 0) + n
+        return total
+
     def list_products_with_counts(self) -> list[dict]:
-        counts = self.product_tier_counts()
+        counts_by_audience = self.product_tier_counts()
         products = self._session.execute(
             select(
                 ProductORM,
@@ -146,6 +156,7 @@ class SqlBuyerQueries:
         ).all()
         by_id: dict[int, dict] = {}
         for product, hs_code, audience, note in products:
+            by_audience = counts_by_audience.get(product.id, {})
             entry = by_id.setdefault(
                 product.id,
                 {
@@ -155,7 +166,8 @@ class SqlBuyerQueries:
                     "description": product.description,
                     "buyer_type": product.buyer_type,
                     "hs_codes": [],
-                    "counts": counts.get(product.id, {}),
+                    "counts": self._summed_counts(by_audience),
+                    "counts_by_audience": by_audience,
                 },
             )
             if hs_code:
@@ -165,7 +177,7 @@ class SqlBuyerQueries:
         return list(by_id.values())
 
     def company_detail(
-        self, company_id: int, product_id: int | None = None
+        self, company_id: int, product_id: int | None = None, audience: str | None = None
     ) -> CompanyDetail | None:
         company = self._session.get(CompanyORM, company_id)
         if company is None:
@@ -186,6 +198,9 @@ class SqlBuyerQueries:
         score_stmt = select(CompanyScoreORM).where(CompanyScoreORM.company_id == company_id)
         if product_id:
             score_stmt = score_stmt.where(CompanyScoreORM.product_id == product_id)
+        if audience:
+            # both 产品两类受众的得分不串台：抽屉只展示当前受众
+            score_stmt = score_stmt.where(CompanyScoreORM.audience == audience)
         for score in self._session.scalars(score_stmt.order_by(CompanyScoreORM.id)):
             detail.scores.append(
                 {

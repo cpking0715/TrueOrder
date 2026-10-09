@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { CompanyDetail } from "@/api/products";
 
-defineProps<{ bills: CompanyDetail["bills"] }>();
+defineProps<{ bills: CompanyDetail["bills"]; highlightId: number | null }>();
 </script>
 
 <template>
@@ -11,6 +11,7 @@ defineProps<{ bills: CompanyDetail["bills"] }>();
   >
     <thead>
       <tr>
+        <th>提单号</th>
         <th>到港</th>
         <th>税号</th>
         <th>原产</th>
@@ -22,8 +23,13 @@ defineProps<{ bills: CompanyDetail["bills"] }>();
     <tbody>
       <tr
         v-for="bill in bills"
+        :id="`bill-row-${bill.bill_id}`"
         :key="bill.bill_id"
+        :class="{ highlighted: highlightId === bill.bill_id }"
       >
+        <td class="small">
+          {{ bill.bill_number || "—" }} <span class="muted">#{{ bill.bill_id }}</span>
+        </td>
         <td>{{ bill.arrival_date }}</td>
         <td>
           {{ bill.hs_code || "—" }}
@@ -46,3 +52,10 @@ defineProps<{ bills: CompanyDetail["bills"] }>();
     </tbody>
   </table>
 </template>
+
+<style scoped>
+tr.highlighted {
+  background: var(--accent-soft);
+  outline: 2px solid var(--accent);
+}
+</style>

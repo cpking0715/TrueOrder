@@ -39,6 +39,7 @@ def list_products(queries: SqlBuyerQueries = Depends(get_buyer_queries)):
             buyer_type=p["buyer_type"],
             hs_codes=p["hs_codes"],  # type: ignore[arg-type]
             counts=p["counts"],
+            counts_by_audience=p.get("counts_by_audience", {}),
         )
         for p in queries.list_products_with_counts()
     ]

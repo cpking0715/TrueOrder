@@ -141,7 +141,7 @@ export interface paths {
         };
         /**
          * Company Detail
-         * @description 公司抽屉：票据、得分理由（带提单 id）、供货方。
+         * @description 公司抽屉：票据、得分理由（带提单 id）、供货方。audience 过滤 both 产品的受众得分。
          */
         get: operations["company_detail_api_companies__company_id__get"];
         put?: never;
@@ -379,6 +379,15 @@ export interface components {
             /** Counts */
             counts: {
                 [key: string]: number;
+            };
+            /**
+             * Counts By Audience
+             * @default {}
+             */
+            counts_by_audience: {
+                [key: string]: {
+                    [key: string]: number;
+                };
             };
         };
         /** ReasonOut */
@@ -620,6 +629,7 @@ export interface operations {
         parameters: {
             query?: {
                 product_id?: number | null;
+                audience?: string | null;
             };
             header?: never;
             path: {

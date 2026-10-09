@@ -4,25 +4,31 @@ import { fetchCompany, type CompanyDetail } from "@/api/products";
 import BillTable from "./BillTable.vue";
 import ReasonList from "./ReasonList.vue";
 
-const props = defineProps<{ companyId: number | null; productId: number }>();
+const props = defineProps<{
+  companyId: number | null;
+  productId: number;
+  audience?: string;
+}>();
 const emit = defineEmits<{ close: [] }>();
 
 const detail = ref<CompanyDetail | null>(null);
 const loading = ref(false);
 const error = ref("");
+const highlightId = ref<number | null>(null);
 
 const score = computed(() => {
   if (!detail.value) return null;
-  return (
-    detail.value.scores.find((s) => s.product_id === props.productId) ??
-    detail.value.scores[0] ??
-    null
-  );
+  // both 产品按当前受众取得分，避免两类受众串台（F5）
+  const byProduct = detail.value.scores.filter((s) => s.product_id === props.productId);
+  return byProduct.find((s) => !props.audience || s.audience === props.audience)
+    ?? byProduct[0]
+    ?? detail.value.scores[0]
+    ?? null;
 });
 
 watch(
-  () => props.companyId,
-  async (id) => {
+  () => [props.companyId, props.productId, props.audience] as const,
+  async ([id]) => {
     if (id == null) {
       detail.value = null;
       return;
@@ -30,7 +36,7 @@ watch(
     loading.value = true;
     error.value = "";
     try {
-      detail.value = await fetchCompany(id, props.productId);
+      detail.value = await fetchCompany(id, props.productId, props.audience);
     } catch (e) {
       error.value = (e as Error).message;
     } finally {
@@ -39,6 +45,19 @@ watch(
   },
   { immediate: true },
 );
+
+// F1：点击理由里的提单号 → 滚动定位并高亮对应提单行
+async function locateBill(billId: number) {
+  highlightId.value = billId;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  document.getElementById(`bill-row-${billId}`)?.scrollIntoView({
+    behavior: "smooth",
+    block: "center",
+  });
+  setTimeout(() => {
+    if (highlightId.value === billId) highlightId.value = null;
+  }, 2500);
+}
 </script>
 
 <template>
@@ -112,7 +131,10 @@ watch(
             </div>
           </div>
           <h2>得分理由</h2>
-          <ReasonList :reasons="score.reasons" />
+          <ReasonList
+            :reasons="score.reasons"
+            @locate="locateBill"
+          />
           <p
             v-if="score.suppliers.length"
             class="small muted"
@@ -124,7 +146,10 @@ watch(
         <h2 style="margin-top: 16px">
           提单（最近 500 票内）
         </h2>
-        <BillTable :bills="detail.bills" />
+        <BillTable
+          :bills="detail.bills"
+          :highlight-id="highlightId"
+        />
       </template>
     </aside>
   </Teleport>

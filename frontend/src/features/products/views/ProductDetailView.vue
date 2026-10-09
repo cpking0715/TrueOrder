@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import NoticeBanner from "@/components/NoticeBanner.vue";
 import {
+  BUYERS_PAGE_LIMIT,
   fetchBuyers,
   fetchMeta,
   fetchProducts,
@@ -32,6 +33,13 @@ const product = computed(
   () => products.value.find((p) => p.product_id === productId.value) ?? null,
 );
 
+// F5：both 产品的页签计数用当前受众的细分数据；单受众产品退回总计数
+const audienceCounts = computed(() => {
+  const current = product.value;
+  if (!current) return {};
+  return current.counts_by_audience?.[audience.value] ?? current.counts;
+});
+
 const filters = useBuyerFilters(
   () => productId.value,
   () => audience.value,
@@ -52,6 +60,7 @@ async function loadBuyers() {
       country: filters.state.value.country,
       minShipments: filters.state.value.minShipments,
       order: filters.state.value.order,
+      limit: BUYERS_PAGE_LIMIT,
     });
     if (seq !== requestSeq) return;
     result.value = data;
@@ -122,7 +131,7 @@ watch(
     />
     <BuyerTabs
       :tier="filters.state.value.tier"
-      :counts="product.counts"
+      :counts="audienceCounts"
       @change="filters.state.value.tier = $event; onTierChange()"
     />
     <FilterBar
@@ -145,14 +154,22 @@ watch(
       :loading="loading"
       @select="selectedCompanyId = $event.company_id"
     />
+    <p
+      v-if="result && result.items.length < result.total"
+      class="small muted"
+      data-testid="truncated-hint"
+    >
+      已显示前 {{ result.items.length }} 家（共 {{ result.total }} 家），导出 CSV 含全部筛选结果。
+    </p>
     <p style="margin-top: 12px">
       <a
         class="btn primary"
         :href="filters.exportUrl.value"
         download
         data-testid="export-button"
+        title="导出当前筛选的全部结果（不受列表显示条数限制）"
       >
-        导出当前筛选 CSV
+        导出当前筛选 CSV（全部）
       </a>
     </p>
   </div>
@@ -165,6 +182,7 @@ watch(
   <CompanyDrawer
     :company-id="selectedCompanyId"
     :product-id="productId"
+    :audience="audience"
     @close="selectedCompanyId = null"
   />
 </template>

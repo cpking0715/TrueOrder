@@ -41,6 +41,8 @@ class ProductOut(BaseModel):
     buyer_type: str
     hs_codes: list[HsCodeOut]
     counts: dict[str, int]
+    # F5：both 产品两类受众的 tier 计数分开，避免页签数字串台
+    counts_by_audience: dict[str, dict[str, int]] = {}
 
 
 class ReasonOut(BaseModel):

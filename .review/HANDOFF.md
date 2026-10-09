@@ -117,3 +117,30 @@ uv run uvicorn app.interface.main:app --port 8000
 3. `importers.py` 去重哈希字段选择（arrival+双方规范化名+税号+提单号+描述前80字符）在真实数据下的误合并/误区分风险。
 4. 前端 `useBuyerFilters` 的参数构造与导出 URL 是否与列表请求完全一致（导出「当前筛选」的等价性）。
 5. 非全量声明链路：`/api/meta` → 前端横幅 → 样本 README，三处口径是否一致且不可被误当全量库使用。
+
+---
+
+# Findings 台账（Cursor 独立审阅 2026-10-09，处理记录）
+
+审阅原文：`.review/cursor-findings.txt`（7 条：F1-F5 P1，F6-F7 P2）。逐条独立判断后处理如下；每条修复均有先红后绿的复现/回归测试。
+
+| 编号 | 严重度 | 结论 | 处理 |
+| --- | --- | --- | --- |
+| F1 理由未真正点回提单（chip 无交互、提单表无单号列） | P1 | **成立，fixed** | `BillTable` 增加「提单号 + #id」列与 `bill-row-{id}` 锚点；`ReasonList` chip 改为可点击按钮，点击后滚动定位并高亮对应提单行 2.5s。组件测试 `点击理由里的提单号会高亮定位对应提单行`；浏览器实测点击「提单 #3」→ `bill-row-3` 高亮。 |
+| F2 EX_PEER_OVERSEAS 被买家词子串击穿（PAPER ⊂ PAPER MILL，种子配置即中招） | P1 | **成立，fixed** | `scoring.py`：被同行词包含的买家命中视为伪命中（`real_buyer_hits`），同行排除与 BUSINESS_MATCH 均改用真命中。领域回归 `买家词只是同行词的子串时是伪命中仍排除`（ATLANTA PAPER MILL 场景）。词表本身保留 PAPER（对纸品加工商是合理买家词），语义漏洞由逻辑修复封死。 |
+| F3 去重指纹：法律后缀折叠 + 缺字段导致真实数据误合并 | P1 | **成立，fixed** | 指纹纳入原产国/港口/数量，货物描述完整参与（不截 80 字符）。4 个领域回归（数量/港口/原产国/长描述差异）。法律后缀折叠保留——与企业识别键（规范化名+国家）一致，属有意设计。**注意**：指纹算法变更后，对已导入旧数据的库再次导入同一文件会双份入库；开发库已 `--drop` 重建，正式库换版时需重建或清空重导。 |
+| F4 列表默认 limit=50 与导出 100000 不等价 | P1 | **成立，fixed** | 列表请求 `limit=500`（`BUYERS_PAGE_LIMIT`）；当 `items.length < total` 时显示「已显示前 N 家（共 T 家），导出 CSV 含全部筛选结果」提示；导出按钮文案与 title 明确「全部」。组件测试 `列表被截断时显示截断提示` + `结果未截断时不显示截断提示`。未实现真分页（v1 范围外，已在未做项注明）。 |
+| F5 both 受众：抽屉得分与页签计数未按 audience 区分 | P1 | **成立，fixed** | 后端：`product_tier_counts` 按 (product, audience) 分层，`ProductOut` 新增 `counts_by_audience`（`counts` 保持总和供卡片）；`/api/companies/{id}` 新增 `audience` 参数过滤得分。前端：页签计数用 `counts_by_audience[当前受众]`，抽屉传 audience。接口测试 2 条 + 组件测试 1 条。**连带发现并修复**：`parse.py` 合并 both 产品多行时买家/同行关键词只取首行——改为跨行并集（领域回归 `多行产品的关键词合并而不是取首行`），此为审阅未直接命中的同域缺陷。 |
+| F6 货代词表过宽（CARGO/LOGISTICS/FREIGHT 单词即排除） | P2 | **部分成立，部分采纳** | 移除 `CARGO`（服装品牌常用词，误伤面最大；领域回归 `名称仅含CARGO不视为货代`）。保留 `LOGISTICS`/`FREIGHT`：名称含这两个词的收货人在提单语境下绝大多数为 3PL/货代，收益大于误伤；词表是 `scoring.py` 顶部常量，接入真实数据后可校准。 |
+| F7 bootstrap 未固定 as_of，样本分层随「今天」漂移 | P2 | **成立，fixed** | `bootstrap.py` 新增 `SEED_AS_OF = 2026-10-09`（与样本设计基准一致），种子导入固定用该基准日；界面/API 导入不受影响仍可指定。 |
+
+处理后的验证（2026-10-09）：
+
+| 命令 | 结果 |
+| --- | --- |
+| `cd backend && uv run pytest -q` | **121 passed**（原 112 + 新增回归 9） |
+| `cd backend && uv run ruff check app tests` | All checks passed! |
+| `cd frontend && pnpm test` | **18 passed**（原 14 + 新增 4） |
+| `cd frontend && pnpm lint` / `pnpm build` | 0 errors / 构建成功 |
+| `uv run python -m app.bootstrap`（幂等） | 重复导入 0 新增；分层与首版一致（成衣 2/1/6、纸板 2/2/0） |
+| 浏览器冒烟 | 抽屉提单号列可见；点击「提单 #3」→ `bill-row-3` 高亮；页签/计数正常 |

@@ -1,0 +1,49 @@
+## FINDINGS
+
+### F1 [P1] 得分理由未真正「点回」提单
+- 位置：[`frontend/src/features/products/components/ReasonList.vue:17-24`](frontend/src/features/products/components/ReasonList.vue)、[`frontend/src/features/products/components/BillTable.vue:23-46`](frontend/src/features/products/components/BillTable.vue)
+- 问题：计划与 `AGENTS.md` 要求「得分理由能点回提单」。实现里 chip 仅渲染文案「提单 #{{ id }}」，无 click/scroll/高亮；下方提单表也不展示 `bill_id`，无法把 `#3` 对到具体行。测试只断言 chip 存在（`ProductDetailView.test.ts`），未锁交互。
+- 影响：可解释性链路在 UI 上不闭环；票多时无法从理由定位证据票。
+- 建议：chip 点击滚动并高亮对应行；`BillTable` 增加 `bill_id`（或提单号）列；补组件测试。
+
+### F2 [P1] EX_PEER_OVERSEAS 被买家词子串击穿（种子配置即中招）
+- 位置：[`backend/app/domain/scoring.py:73-75,160-167`](backend/app/domain/scoring.py)、[`backend/app/seed/products.csv:3`](backend/app/seed/products.csv)
+- 问题：匹配是子串：`keyword in business_text`；排除条件为 `peer_hits and not buyer_hits`。P-BOARD 买家词含 `PAPER`，同行词含 `PAPER MILL`——名称含 `PAPER MILL` 时必然同时命中 `PAPER`，同行排除永不触发。领域测试还把「双命中不排除」写成正向用例（`test_同行词与买家词同时命中时不排除`），未覆盖「同行词包含买家词子串」反例。
+- 影响：纸板产品上「造纸厂/纸浆厂」类同行海外主体可能进潜在甚至精准池，六类排除名存实亡于该配置。
+- 建议：改为词边界/token 匹配；或 peer 优先且不因更短买家词豁免；调整种子词表（如去掉过于宽泛的 `PAPER`）；补回归测试。
+
+### F3 [P1] 去重指纹：法律后缀折叠 + 缺字段 → 真实数据误合并
+- 位置：[`backend/app/domain/parse.py:64-76`](backend/app/domain/parse.py)、[`backend/tests/domain/test_parse.py:74-77`](backend/tests/domain/test_parse.py)
+- 问题：指纹用规范化收/发货人名（剥离 LLC/INC 等），测试明确要求 `...LLC` 与 `...INC` 同指纹。未纳入 `origin_country` / `port` / `quantity`；`product_description` 只取前 80 字符；`bill_number` 为空时区分度很弱。
+- 影响：授权 CSV 若提单号缺失或重复、或同日同当事人同税号多票，会静默丢票（`duplicate_bills++`）；不同法人形态也可能被当成同一票。
+- 建议：有提单号时以提单号（+承运人若有）为主键；无提单号时纳入数量/港口/原产国；法律后缀不宜单独导致哈希相等；补「空提单号不应误合并」测试。
+
+### F4 [P1] 列表默认 limit=50，导出 limit=100000——「当前筛选」在大数据下不等价
+- 位置：[`backend/app/interface/routers/products.py:56-57,101-110`](backend/app/interface/routers/products.py)、[`frontend/src/api/products.ts:44-51`](frontend/src/api/products.ts)
+- 问题：列表与导出共享筛选参数，但列表默认 `limit=50` 且前端不传分页；导出写死 `limit=100000`。`FilterBar` 显示 `共 {{ total }} 家`，表格可能只渲染前 50。
+- 影响：样本库无感；授权数据 >50 家时，用户所见名单与导出 CSV 行数不一致，违背「导出当前筛选」。
+- 建议：前端分页或提高/对齐 limit；导出说明「全量筛选结果」；或列表与导出使用同一 limit 策略并在 UI 标明截断。
+
+### F5 [P1] `both` 受众：抽屉得分与页签计数未按 audience 区分
+- 位置：[`frontend/src/features/products/components/CompanyDrawer.vue:14-20`](frontend/src/features/products/components/CompanyDrawer.vue)、[`frontend/src/features/products/views/ProductDetailView.vue:165-168`](frontend/src/features/products/views/ProductDetailView.vue)、[`backend/app/infrastructure/queries.py:122-133`](backend/app/infrastructure/queries.py)
+- 问题：抽屉只按 `product_id` 取第一条 score，未接当前 `audience`；`product_tier_counts` 按 `(product_id, tier)` 聚合，把 importer/factory 加总。UI 已支持 both 受众切换，样本虽无 both 产品。
+- 影响：一旦导入 `buyer_type=both`，抽屉可能展示错误受众的理由/票数；页签数字膨胀，与当前列表不符。
+- 建议：抽屉传入 `audience` 并过滤 score；计数 API 按 audience 返回或前端按受众过滤。
+
+### F6 [P2] 货代词表过宽，易误伤真实买家
+- 位置：[`backend/app/domain/scoring.py:31-35,131-135`](backend/app/domain/scoring.py)
+- 问题：`FORWARDER_TOKENS` 含 `CARGO`、`LOGISTICS`、`FREIGHT` 等，对名称与地址 token 做集合交集；如 `CARGO APPAREL` 会被 `EX_FORWARDER`。
+- 影响：部分进口商品牌/贸易商被整类排除，缩小潜在池。
+- 建议：收紧为多词短语或要求与 FORWARDING/NVOCC 等强特征共现；用真实样本校准。
+
+### F7 [P2] bootstrap 未固定 `as_of`，样本分层随「今天」漂移
+- 位置：[`backend/app/bootstrap.py:35`](backend/app/bootstrap.py)、[`backend/app/infrastructure/importers.py:119-120`](backend/app/infrastructure/importers.py)
+- 问题：种子提单按约 2026-10 窗口设计，bootstrap 打分用 `date.today()`；README/种子说明已知，但默认入口未钉死基准日。
+- 影响：距基准较远时演示数据的潜在/精准/排除与文档对照表不一致，易误判实现错误。
+- 建议：bootstrap/种子导入默认 `as_of=2026-10-09`（或读种子元数据）；界面导入仍可用用户指定日期。
+
+---
+
+## 总结
+
+计划符合性整体达标：产品为入口、工厂税号 480810（非 4819）、`/api/meta`→横幅→种子 README 非全量口径一致、领域层六类排除有测试与样本覆盖、无 Apollo/PDL/Hunter/Places/爬虫路径、domain 无框架依赖；导出与列表的筛选参数构造一致（`buildBuyersParams` 共用）。主要缺口是「点回提单」交互未落地（F1）、同行排除与种子词表存在语义漏洞（F2）、去重与分页/导出在真实体量下的正确性风险（F3/F4），以及 both 受众的计数/抽屉（F5）。测试对样本主路径可信（领域+接口锁了分层与排除），但对 F1/F2/F4 未形成防线。样本演示可交付；接入授权全量前应先修 F1–F4。

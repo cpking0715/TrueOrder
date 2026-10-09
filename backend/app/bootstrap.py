@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import date
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -16,6 +17,9 @@ from app.infrastructure.importers import CsvImporter
 from app.infrastructure.orm import Base
 
 SEED_DIR = Path(__file__).parent / "seed"
+# 种子样本是按 2026-10 的滚动窗口设计的静态日期；固定基准日，避免随「今天」漂移
+# 让演示分层与 sample_bills.README.md 的场景对照表失真。界面/API 导入不受影响。
+SEED_AS_OF = date(2026, 10, 9)
 
 
 def main(drop: bool = False) -> None:
@@ -32,7 +36,9 @@ def main(drop: bool = False) -> None:
     with Session(engine) as session:
         importer = CsvImporter(session)
         p = importer.import_products(products_csv, source="seed/products.csv")
-        b, rescores = importer.import_bills(bills_csv, source_ref="seed/sample_bills.csv")
+        b, rescores = importer.import_bills(
+            bills_csv, source_ref="seed/sample_bills.csv", as_of=SEED_AS_OF
+        )
 
     print(
         f"产品导入：{p.products_upserted} 个产品，{p.hs_assignments_written} 条税号对应，"

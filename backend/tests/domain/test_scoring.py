@@ -189,6 +189,16 @@ class Test排除规则:
         result = score_company(GARMENT_PRODUCT, "importer", facts, AS_OF)
         assert result.exclusion_code == "EX_FORWARDER"
 
+    def test_名称仅含CARGO不视为货代(self):
+        # F6 回归：CARGO 一词过宽（如 CARGO BRANDS 是服装品牌常用词），不单独触发
+        facts = company(
+            name="CAROLINA CARGO BRANDS LLC",
+            address="77 HARBOUR ST, CHARLESTON SC 29401, USA",
+            bills=(bill(75, date(2026, 3, 1)),),
+        )
+        result = score_company(GARMENT_PRODUCT, "importer", facts, AS_OF)
+        assert result.exclusion_code != "EX_FORWARDER"
+
     def test_集团内部供货_全部票来自自身_被排除(self):
         facts = company(
             name="VN GARMENT JOINT STOCK CO",
@@ -224,7 +234,7 @@ class Test排除规则:
         result = score_company(GARMENT_PRODUCT, "importer", facts, AS_OF)
         assert result.exclusion_code == "EX_RELATED_PARTY"
 
-    def test_同行海外公司被排除(self):
+    def test_同行海外公司被排除_理由列出命中词与票号(self):
         facts = company(
             name="SHENZHEN GARMENT FACTORY LTD",
             address="INDUSTRIAL ZONE 3, SHENZHEN, CN",
@@ -233,8 +243,12 @@ class Test排除规则:
         )
         result = score_company(GARMENT_PRODUCT, "importer", facts, AS_OF)
         assert result.exclusion_code == "EX_PEER_OVERSEAS"
+        reason = [r for r in result.reasons if r.code == "EX_PEER_OVERSEAS"][0]
+        assert "GARMENT FACTORY" in reason.text
+        assert reason.bill_ids == (95,)
 
     def test_同行词与买家词同时命中时不排除(self):
+        # buyer 词（PACKAGING）与 peer 词（PAPER MILL）互不包含：独立的买家信号
         facts = company(
             name="EURO CARTON PACKAGING TRADING BV",
             bills=(
@@ -246,6 +260,22 @@ class Test排除规则:
         )
         result = score_company(BOARD_PRODUCT, "factory", facts, AS_OF)
         assert result.tier != "excluded"
+
+    def test_买家词只是同行词的子串时是伪命中仍排除(self):
+        # F2 回归：PAPER 是买家词、PAPER MILL 是同行词；纸厂命中 PAPER 属伪命中
+        facts = company(
+            name="ATLANTA PAPER MILL CORP",
+            address="9 MILL RD, ATLANTA GA 30301, USA",
+            bills=(
+                bill(120, date(2026, 2, 1), hs="480810",
+                     shipper="SHANDONG PAPER CO LTD", description="PAPERBOARD"),
+                bill(121, date(2026, 5, 1), hs="480810",
+                     shipper="SHANDONG PAPER CO LTD", description="PAPERBOARD"),
+            ),
+        )
+        result = score_company(BOARD_PRODUCT, "factory", facts, AS_OF)
+        assert result.tier == "excluded"
+        assert result.exclusion_code == "EX_PEER_OVERSEAS"
 
     def test_税号误码_仅有可疑票_被排除且理由带票号(self):
         facts = company(

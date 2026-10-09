@@ -76,6 +76,30 @@ class Test去重指纹:
         b, _ = parse_bill_row(row(consignee_name="BROOKLYN APPAREL INC"), "a.csv", 3)
         assert bill_dedup_hash(a) == bill_dedup_hash(b)
 
+    def test_同日同当事人同税号不同数量指纹不同(self):
+        # F3 回归：拼柜/分单场景，靠数量区分
+        a, _ = parse_bill_row(row(quantity="1200", bill_number=""), "a.csv", 2)
+        b, _ = parse_bill_row(row(quantity="900", bill_number=""), "a.csv", 3)
+        assert bill_dedup_hash(a) != bill_dedup_hash(b)
+
+    def test_同日同当事人同税号不同港口指纹不同(self):
+        a, _ = parse_bill_row(row(port="NEW YORK", bill_number=""), "a.csv", 2)
+        b, _ = parse_bill_row(row(port="SAVANNAH", bill_number=""), "a.csv", 3)
+        assert bill_dedup_hash(a) != bill_dedup_hash(b)
+
+    def test_原产国不同指纹不同(self):
+        a, _ = parse_bill_row(row(origin_country="CHINA", bill_number=""), "a.csv", 2)
+        b, _ = parse_bill_row(row(origin_country="VIETNAM", bill_number=""), "a.csv", 3)
+        assert bill_dedup_hash(a) != bill_dedup_hash(b)
+
+    def test_描述差异超出八十字符仍影响指纹(self):
+        # F3 回归：描述截断会让长描述的后段差异丢失
+        long_a = "W" * 100 + "A"
+        long_b = "W" * 100 + "B"
+        a, _ = parse_bill_row(row(product_description=long_a, bill_number=""), "a.csv", 2)
+        b, _ = parse_bill_row(row(product_description=long_b, bill_number=""), "a.csv", 3)
+        assert bill_dedup_hash(a) != bill_dedup_hash(b)
+
 
 class Test产品目录解析:
     @staticmethod
@@ -106,6 +130,19 @@ class Test产品目录解析:
         both = [p for p in products if p.code == "P-BOTH"][0]
         assert both.buyer_type == "both"
         assert {h.hs_code for h in both.hs_assignments} == {"600632", "620462"}
+
+    def test_多行产品的关键词合并而不是取首行(self):
+        # F5 连带：both 产品两类受众各有买家词，合并后都要保留
+        products, _ = parse_product_rows(
+            [
+                {"code": "B", "name": "n", "buyer_type": "both",
+                 "hs_code": "620462", "audience": "importer", "buyer_keywords": "APPAREL"},
+                {"code": "B", "name": "n", "buyer_type": "both",
+                 "hs_code": "600632", "audience": "factory", "buyer_keywords": "WEAVING"},
+            ],
+            "p.csv",
+        )
+        assert products[0].buyer_keywords == ("APPAREL", "WEAVING")
 
     def test_关键词按分号切分并大写(self):
         products, _ = parse_product_rows(

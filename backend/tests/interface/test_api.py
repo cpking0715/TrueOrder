@@ -183,3 +183,66 @@ class Test公司抽屉:
 
     def test_公司不存在返回404(self, client):
         assert client.get("/api/companies/99999").status_code == 404
+
+
+BOTH_PRODUCTS_CSV = """code,name,description,buyer_type,hs_code,audience,note,buyer_keywords,peer_keywords
+P-GARMENT,成衣,卖给进口商,importer,620462,importer,成衣税号,APPAREL;CLOTHING,GARMENT FACTORY
+P-BOTH,面料与成衣,两者都卖,both,620462,importer,成衣受众,APPAREL;CLOTHING,
+P-BOTH,面料与成衣,两者都卖,both,600632,factory,工厂受众,WEAVING;TEXTILE,
+"""
+
+BOTH_BILLS_CSV = """arrival_date,bill_number,consignee_name,consignee_address,consignee_country,shipper_name,shipper_address,shipper_country,origin_country,hs_code,product_description,port,quantity
+2026-02-10,B1,SAIGON WEAVING MILL JSC,"LOT 5 VSIP, BINH DUONG, VN",US,JIANGSU FABRIC CO LTD,"NANTONG, CN",CN,CHINA,600632,"COTTON WOVEN FABRIC",LOS ANGELES,5000 KG
+2026-06-15,B2,SAIGON WEAVING MILL JSC,"LOT 5 VSIP, BINH DUONG, VN",US,JIANGSU FABRIC CO LTD,"NANTONG, CN",CN,CHINA,600632,"COTTON WOVEN FABRIC",LOS ANGELES,4800 KG
+2026-01-20,B3,MIDTOWN CLOTHING LLC,"200 W 40TH ST, NEW YORK NY 10018, USA",US,HANGZHOU GARMENT CO LTD,"HANGZHOU, CN",CN,CHINA,620462,"WOMENS COTTON TROUSERS",NEW YORK,700 CTNS
+2026-04-20,B4,MIDTOWN CLOTHING LLC,"200 W 40TH ST, NEW YORK NY 10018, USA",US,HANGZHOU GARMENT CO LTD,"HANGZHOU, CN",CN,CHINA,620462,"WOMENS COTTON TROUSERS",NEW YORK,650 CTNS
+"""
+
+
+def seed_both_via_api(client) -> int:
+    client.post(
+        "/api/products/import",
+        files={"file": ("products.csv", BOTH_PRODUCTS_CSV, "text/csv")},
+    )
+    client.post(
+        "/api/bills/import",
+        files={"file": ("bills.csv", BOTH_BILLS_CSV, "text/csv")},
+        data={"as_of": AS_OF},
+    )
+    both = [p for p in client.get("/api/products").json() if p["code"] == "P-BOTH"][0]
+    return both["product_id"]
+
+
+class Test双受众产品:
+    def test_产品计数按受众细分且总和兼容(self, client):
+        both_id = seed_both_via_api(client)
+        both = [p for p in client.get("/api/products").json() if p["product_id"] == both_id][0]
+        # F5：counts_by_audience 分开，counts 保持总和（卡片用）
+        assert both["counts_by_audience"] == {
+            "importer": {"precise": 1},
+            "factory": {"precise": 1},
+        }
+        assert both["counts"] == {"precise": 2}
+
+    def test_抽屉得分按受众过滤(self, client):
+        both_id = seed_both_via_api(client)
+        importer_buyers = client.get(
+            f"/api/products/{both_id}/buyers", params={"audience": "importer", "tier": "precise"}
+        ).json()["items"]
+        factory_buyers = client.get(
+            f"/api/products/{both_id}/buyers", params={"audience": "factory", "tier": "precise"}
+        ).json()["items"]
+        assert [b["name"] for b in importer_buyers] == ["MIDTOWN CLOTHING LLC"]
+        assert [b["name"] for b in factory_buyers] == ["SAIGON WEAVING MILL JSC"]
+
+        weaving_id = factory_buyers[0]["company_id"]
+        detail = client.get(
+            f"/api/companies/{weaving_id}",
+            params={"product_id": both_id, "audience": "factory"},
+        ).json()
+        # F5：只返回当前受众的得分，不再串台
+        assert [s["audience"] for s in detail["scores"]] == ["factory"]
+        assert detail["scores"][0]["tier"] == "precise"
+
+        detail_all = client.get(f"/api/companies/{weaving_id}").json()
+        assert len(detail_all["scores"]) == 1  # 该公司只在 factory 受众有得分
