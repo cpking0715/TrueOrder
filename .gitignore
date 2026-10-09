@@ -28,3 +28,4 @@ Thumbs.db
 
 # 导出的产物（生成型文件不入库的例外见 README）
 openapi.json
+frontend/tsconfig.tsbuildinfo
