@@ -351,3 +351,15 @@ verdict：**F1-F4 全部 verified**（复审通过读 fastapi 0.143 源码确认
 | N3 跨请求持久化测试库 URL 硬编码、engine 参数未用 | nit | **成立，fixed** | 改用 `engine.url.render_as_string(hide_password=False)`——注意 `str(url)` 会把密码打码导致认证失败（已踩坑修正） |
 
 最终状态（2919cd2）：189 passed + smoke 2 + ruff 干净 + 前端 30。WP1 交付。
+
+## 终审与收敛（2026-10-10，WP1 关闭）
+
+终审 verdict：**核心全部 verified**——四个写方法 commit 均在响应前、失败路径全部绕过 commit、只读路径无意外提交、`POST /api/products` 链路（create_quick→rescore_one commit）未被撤销 deps 自动 commit 牵连。3 条非阻塞观察处理（47b14d8）：
+
+| 观察 | 处理 |
+| --- | --- |
+| 409 回归测试只锁「预查重生效」，未锁「失败不提交」语义（deps 自动 commit 若被加回该测试照样过） | 补并发兜底测试：monkeypatch `_duplicate_exists` 盲化，逼出 IntegrityError 分支，断言唯一一条 + 会话可用——该分支含 rollback，若有人恢复 deps 自动 commit 且路径留脏即被抓 |
+| 生产式测试用裸 sessionmaker，与生产 `expire_on_commit=False/autoflush=False` 配置不一致 | 统一复用 `db.make_session_factory` |
+| import_csv 逐行 commit 后失去原子性，尾部 commit 多余 | 移除多余 commit；**行级提交（非原子）为已知行为**：中途失败留已提交前半批；导入常规路径无异常抛出（校验/查重前置），实际风险≈0，若未来需要原子导入再给 add 加 commit 开关 |
+
+**WP1 关闭状态（47b14d8）**：190 passed + smoke 2 + ruff 干净 + 前端 30。审阅四轮（初审 5 条→修复→复审 3 条→修复→终审 verified），收敛。
