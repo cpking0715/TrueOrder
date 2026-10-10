@@ -314,3 +314,28 @@ base=61fd58b  head=01babf6
 4. **前端组件拆分**：ContactItem 的 `@update` emit 链（panel 传 contact_id）是否会把 A 联系人的编辑提交到 B。
 5. **迁移**：部分唯一索引在 alembic autogenerate 产物中的 `postgresql_where` 保真度；`website_confirmed` server_default 对存量库的影响。
 6. **产品详情路由**与既有列表路由的 id 冲突（`/api/products/{product_id}` vs `/api/products/import` 的路由顺序）。
+
+## Findings 台账（Claude Code 独立审阅 2026-10-10，对 01babf6；修复轮 c2762f7）
+
+审阅产出 5 条（1 blocker / 1 major / 3 minor）+ 2 项焦点确认无缺陷（路由顺序、部分唯一索引一致性）：
+
+| 编号 | 严重度 | 结论 | 处理 |
+| --- | --- | --- | --- |
+| F1 单条写路径（add/update/delete/官网 PATCH）只 flush 无 commit，生产每请求独立会话全部回滚；测试因 conftest 共享 session 掩盖 | **blocker** | **成立，fixed** | `deps.get_session` 改为「请求成功自动 commit、异常回滚」的统一出口（既有 importer 显式 commit 兼容无害）；复现测试用生产式 session 工厂（monkeypatch `_session_factory`，不 override get_session）跨请求断言持久化，先红后绿 |
+| F2 `add()` 的裸 `rollback()` 在导入循环中吞掉同批前面未提交行，added 计数虚报 | major | **成立，fixed** | add/update 改**预查重**（`_duplicate_exists`，同事务已 flush 行对 select 可见），常规路径零异常；DB 唯一约束只在并发窗口兜底（此时 rollback 吞行为已知限制，单用户系统窗口≈0） |
+| F3 `update()` 先改字段后验邮箱，422 时其他字段留脏改动 | minor | **成立，fixed** | 校验前置（invalid_email/duplicate 均在改动前返回）；复现测试断言 422 后 title 未变 |
+| F4 CSV 按名称定位缺国家时静默默认 US，可能错挂同名美国公司 | minor | **成立，fixed** | 名称定位必须带国家，缺失归入 `invalid_rows`（带行号提示） |
+| F5 联系人导出 `limit=100000` 静默截断无信号 | minor | **记录为已知限制** | 与买家导出同口径同上限；当前数据规模（万级）不可触发，真实全量接入时随分页统一处理 |
+| 焦点 6 路由顺序（GET /{id} vs POST /import） | — | 无缺陷 | 方法不同不冲突；GET /import 返回 422 属美观问题 |
+| 焦点 1 部分唯一索引与 normalize_email 一致性 | — | 无缺陷 | 双方 lower 语义一致 |
+
+修复轮验证（c2762f7）：
+
+| 命令 | 结果 |
+| --- | --- |
+| `uv run pytest -q` | **188 passed**（+4 复现/行为锁） |
+| `uv run pytest -q -m smoke` | **2 passed** |
+| `uv run ruff check .` | All checks passed |
+| `pnpm test` | **30 passed** |
+
+排查过程记录（供复审参考）：F2 修复先后尝试 savepoint context/显式两版均表现异常，最终定位为**测试自身 CSV 列数错误**（6 列被当 7 列解析，email 落到 title 列、插入 email=NULL 行绕过一切去重），期间两次按行号改测试误删语句；换 csv.writer 生成测试数据并恢复被删语句后，预查重方案一次通过。产品代码的 savepoint 方案本身是否可行未继续验证（预查重方案更简单可预测，已采用）。
