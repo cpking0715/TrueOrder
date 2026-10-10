@@ -66,6 +66,8 @@ pnpm build      # 产物由后端托管
 
 样本文件：`backend/app/seed/products.csv`、`backend/app/seed/sample_bills.csv`（非全量、公司名虚构，场景说明见同目录 README）。
 
+> **升级注意（去重指纹变更）**：提单去重指纹的字段集在 2026-10-09 的提交 `aae6768` 中扩展过（纳入原产国/港口/数量、描述全量）。指纹算法变更后，**对旧库再次导入同一 CSV 会因哈希不同而双份入库**。已有数据的库升级代码版本后，请重建库（`uv run python -m app.bootstrap --drop` 后重导授权数据），不要在旧库上直接追加导入。
+
 ## 测试
 
 ```bash

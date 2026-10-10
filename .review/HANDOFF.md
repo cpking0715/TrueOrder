@@ -144,3 +144,17 @@ uv run uvicorn app.interface.main:app --port 8000
 | `cd frontend && pnpm lint` / `pnpm build` | 0 errors / 构建成功 |
 | `uv run python -m app.bootstrap`（幂等） | 重复导入 0 新增；分层与首版一致（成衣 2/1/6、纸板 2/2/0） |
 | 浏览器冒烟 | 抽屉提单号列可见；点击「提单 #3」→ `bill-row-3` 高亮；页签/计数正常 |
+
+---
+
+# 第二轮复审记录（Cursor 2026-10-09，对修复轮 aae6768 的复核）
+
+复审原文：`.review/cursor-recheck.txt`。结论：**F1-F7 全部 verified，未发现新 P0/P1，修复轮可交付**。3 条 P2 处理如下：
+
+| 编号 | 问题 | 结论 | 处理 |
+| --- | --- | --- | --- |
+| F1' 货代词表注释与实现不符（注释称 LOGISTICS 不纳入，实际保留） | P2 | 成立 | 注释改为如实描述：已移除 CARGO；保留 LOGISTICS/FREIGHT 及理由。 |
+| F2' 前端测试未锁定列表 limit=500 | P2 | 成立 | `默认展示潜在客户` 用例补 `expect.objectContaining({ tier, limit: 500 })`，参数回退会被测到。 |
+| F3' 指纹变更缺升级告警/文档 | P2 | 成立 | README「数据导入」节写明升级步骤：已有库升级后须 `--drop` 重建重导，不要旧库追加导入。（导入时自动检测指纹版本属过度工程，文档化即可） |
+
+处理后复跑：后端 `uv run pytest -q` 121 通过、ruff 0 错；前端 `pnpm test` 18 通过、ESLint 0 错。

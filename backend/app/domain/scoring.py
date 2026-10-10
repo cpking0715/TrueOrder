@@ -28,7 +28,8 @@ ORIGIN_ALLOWED = {"CN", "VN"}
 
 BLANK_PREFIXES = ("TO THE ORDER", "ORDER OF", "TO ORDER")
 BANK_TOKENS = {"BANK", "BANCO", "BANQUE"}
-# 单词级强特征；CARGO/LOGISTICS 一词过宽易误伤品牌名，不单独纳入（F6）
+# 单词级强特征。已移除 CARGO（服装品牌常用词，误伤面大）；保留 LOGISTICS/FREIGHT——
+# 提单收货人语境下含这两个词的多为 3PL/货代，收益大于误伤（词表可用真实授权数据校准）。
 FORWARDER_TOKENS = {
     "FORWARDER", "FORWARDING", "FREIGHT", "NVOCC", "3PL",
     "EXPEDITORS", "KUEHNE", "NAGEL", "SCHENKER", "PANALPINA", "DSV", "CEVA",

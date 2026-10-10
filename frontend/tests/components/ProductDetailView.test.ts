@@ -178,7 +178,11 @@ describe("产品详情页（用户可见结果）", () => {
   it("默认展示潜在客户", async () => {
     await renderView();
     expect(await screen.findByText("LONE STAR CLOTHING CO")).toBeTruthy();
-    expect(fetchBuyers).toHaveBeenCalledWith(1, expect.objectContaining({ tier: "potential" }));
+    // F4 防线：列表必须显式带大 limit，否则后端默认 50 会让「所见」与「导出」不一致
+    expect(fetchBuyers).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ tier: "potential", limit: 500 }),
+    );
   });
 
   it("点击精准页签切换到精准客户", async () => {
