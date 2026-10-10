@@ -20,6 +20,7 @@ const confidenceLabel = computed(() =>
 const emit = defineEmits<{ confirmed: [] }>();
 
 const editing = ref(false);
+const confirming = ref(false);
 const draft = ref("");
 const confirmedDraft = ref(false);
 const error = ref("");
@@ -57,12 +58,15 @@ async function save() {
 
 async function confirm() {
   error.value = "";
+  confirming.value = true;
   try {
     const result = await confirmWebsite(props.companyId);
     currentConfirmed.value = result.website_confirmed;
     emit("confirmed");
   } catch (e) {
     error.value = (e as Error).message;
+  } finally {
+    confirming.value = false;
   }
 }
 </script>
@@ -76,6 +80,7 @@ async function confirm() {
       官网：
       <a
         v-if="current"
+        class="code"
         :href="current.startsWith('http') ? current : `https://${current}`"
         target="_blank"
         rel="noopener"
@@ -96,11 +101,18 @@ async function confirm() {
       <button
         v-if="current && !currentConfirmed"
         class="small"
+        :disabled="confirming"
         data-testid="confirm-website"
         @click="confirm"
       >
-        确认是官网
+        {{ confirming ? "确认中…" : "确认是官网" }}
       </button>
+      <span
+        v-if="error && !editing"
+        class="error small"
+        role="alert"
+        data-testid="website-error"
+      >{{ error }}</span>
       <button
         class="small ghost"
         data-testid="edit-website"

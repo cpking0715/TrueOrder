@@ -147,8 +147,18 @@ button, .btn {
   transition: border-color 120ms ease, background-color 120ms ease;
 }
 button.primary, .btn.primary { background: var(--marine); color: #fff; border-color: var(--marine); }
-button.primary:hover, .btn.primary:hover { background: var(--marine-deep); border-color: var(--marine-deep); }
-button:hover, .btn:hover { border-color: var(--marine); }
+button.primary:hover:not(:disabled), .btn.primary:hover:not(:disabled) {
+  background: var(--marine-deep);
+  border-color: var(--marine-deep);
+}
+button:hover:not(:disabled), .btn:hover:not(:disabled) { border-color: var(--marine); }
+:is(button, .btn):disabled { opacity: 0.55; cursor: not-allowed; }
+button.ghost, .btn.ghost { background: transparent; color: var(--ink-soft); }
+button.ghost:hover:not(:disabled), .btn.ghost:hover:not(:disabled) {
+  background: #fff;
+  border-color: var(--marine);
+  color: var(--marine);
+}
 :is(button, .btn, a, input, select, [tabindex]):focus-visible {
   outline: 2px solid var(--marine);
   outline-offset: 2px;
@@ -187,6 +197,8 @@ table.grid th {
   white-space: nowrap;
 }
 table.grid tr.clickable { cursor: pointer; }
+table.grid tr.clickable:focus-visible { outline: 2px solid var(--marine); outline-offset: -2px; }
+.table-scroll { overflow-x: auto; }  /* 移动端宽表横向滚动 */
 table.grid tr.clickable:hover { background: #f4f8f8; }
 table.grid tr.clickable:hover td:first-child strong { color: var(--marine); }
 
@@ -299,6 +311,38 @@ tr.highlighted { background: var(--marine-soft); outline: 2px solid var(--marine
 }
 .hs-input input::placeholder { letter-spacing: 0.06em; font-size: 15px; color: #9aa7b5; }
 
+/* ---------- 联系人与补全区（D1 补齐：此前被组件引用却从未定义） ---------- */
+.error { color: var(--stamp); }
+.badge.warn { background: var(--stamp-soft); color: var(--stamp); border-color: #eec4be; }
+.badge.muted { background: #f2f5f8; color: var(--ink-soft); }
+.contacts-panel { margin-top: 14px; }
+.contacts-panel h3 { margin: 10px 0 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.contact-list { list-style: none; padding: 0; margin: 6px 0; }
+.contact-list > li { padding: 8px 0; border-bottom: 1px dashed var(--line); }
+.contact-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; margin: 6px 0; }
+.contact-form label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--ink-soft); }
+.tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.actions { display: flex; gap: 6px; margin-top: 4px; }
+.website-field { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.enrichbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  margin: 10px 0;
+  border: 1px dashed var(--line);
+  border-left: 3px solid var(--hold);
+  border-radius: 6px;
+  background: #fbfcfd;
+}
+.input-narrow { width: 4.5rem; }
+.input-country { width: 7rem; }
+.stack-top { margin-top: 12px; }
+.panel > h1, .panel > h2 { margin-top: 0; }
+.panel .eyebrow + h1, .panel .eyebrow + h2 { margin-top: 0; }
+.drawer h2 { margin-top: 14px; }
+
 /* ---------- 筛选 / 理由 / 抽屉 ---------- */
 .filterbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
 .filterbar .grow { flex: 1; min-width: 220px; }
@@ -375,6 +419,8 @@ tr.highlighted { background: var(--marine-soft); outline: 2px solid var(--marine
   .quickstart label { min-width: 0; }
   .hs-input input { width: 100%; }
   .summary-grid { grid-template-columns: 1fr 1fr; }
+  .filterbar, .enrichbar, .contact-form { flex-direction: column; align-items: stretch; }
+  .filterbar input, .filterbar select, .enrichbar input, .contact-form input { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

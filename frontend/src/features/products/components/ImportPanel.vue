@@ -60,7 +60,7 @@ async function onBillsFile(event: Event) {
     <p class="eyebrow">
       Data Intake
     </p>
-    <h2 style="margin-top: 0">
+    <h2>
       数据导入（CSV）
     </h2>
     <p class="muted small">

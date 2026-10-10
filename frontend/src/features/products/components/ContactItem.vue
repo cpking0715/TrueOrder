@@ -33,8 +33,14 @@ const verifyLabel: Record<string, string> = {
       <strong>{{ contact.name ?? "（通用邮箱）" }}</strong>
       <span v-if="contact.title"> · {{ contact.title }}</span>
       <div class="muted small">
-        <span v-if="contact.email">{{ contact.email }}</span>
-        <span v-if="contact.phone"> · {{ contact.phone }}</span>
+        <span
+          v-if="contact.email"
+          class="code"
+        >{{ contact.email }}</span>
+        <span
+          v-if="contact.phone"
+          class="code"
+        > · {{ contact.phone }}</span>
       </div>
       <div class="tags">
         <span

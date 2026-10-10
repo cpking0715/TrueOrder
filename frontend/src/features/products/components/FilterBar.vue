@@ -22,8 +22,8 @@ const emit = defineEmits<{
     >
     <input
       :value="state.country"
+      class="input-country"
       placeholder="国家（如 US）"
-      style="width: 110px"
       data-testid="filter-country"
       @input="emit('update:country', ($event.target as HTMLInputElement).value); emit('changed')"
     >

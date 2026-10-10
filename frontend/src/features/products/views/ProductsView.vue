@@ -51,7 +51,7 @@ onMounted(async () => {
     <p class="eyebrow">
       My Products
     </p>
-    <h2 style="margin-top: 0">
+    <h2>
       我的产品
     </h2>
     <p

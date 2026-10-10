@@ -28,9 +28,10 @@ const tierLabel: Record<string, string> = {
     </p>
     <p
       v-if="company.same_name_conflict"
-      class="badge conflict"
+      class="alert small"
     >
-      同名冲突：不同城市线索出现同一名称，未自动合并
+      <span class="badge conflict">同名冲突</span>
+      不同城市线索出现同一名称，未自动合并——请人工核对再联系。
     </p>
     <p
       v-if="company.address"

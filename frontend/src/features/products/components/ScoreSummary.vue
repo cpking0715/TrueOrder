@@ -12,7 +12,7 @@ defineProps<{ score: CompanyDetail["scores"][number] }>();
       </div>票数
     </div>
     <div class="box">
-      <div class="num">
+      <div class="num code">
         {{ score.last_arrival ?? "—" }}
       </div>最近到港
     </div>

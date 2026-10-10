@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { fetchCompany, type CompanyDetail } from "@/api/products";
 import BillTable from "./BillTable.vue";
 import CompanySummary from "./CompanySummary.vue";
@@ -69,6 +69,9 @@ watch(
       return;
     }
     window.addEventListener("keydown", onKeydown);
+    void nextTick(() => {
+      document.querySelector<HTMLElement>("[data-testid='drawer-close']")?.focus();
+    });
     void load(id);
   },
   { immediate: true },
@@ -127,6 +130,22 @@ async function locateBill(billId: number) {
           :tier="score?.tier ?? null"
         />
 
+        <ScoreSection
+          v-if="score"
+          :score="score"
+          @locate="locateBill"
+        />
+
+        <h2>
+          提单（最近 500 票内）
+        </h2>
+        <div class="table-scroll">
+          <BillTable
+            :bills="detail.bills"
+            :highlight-id="highlightId"
+          />
+        </div>
+
         <WebsiteField
           :company-id="detail.company.company_id"
           :website="detail.company.website"
@@ -135,20 +154,6 @@ async function locateBill(billId: number) {
           @confirmed="reload"
         />
         <ContactsPanel :company-id="detail.company.company_id" />
-
-        <ScoreSection
-          v-if="score"
-          :score="score"
-          @locate="locateBill"
-        />
-
-        <h2 style="margin-top: 16px">
-          提单（最近 500 票内）
-        </h2>
-        <BillTable
-          :bills="detail.bills"
-          :highlight-id="highlightId"
-        />
       </template>
     </aside>
   </Teleport>

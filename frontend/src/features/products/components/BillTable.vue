@@ -27,18 +27,22 @@ defineProps<{ bills: CompanyDetail["bills"]; highlightId: number | null }>();
         :key="bill.bill_id"
         :class="{ highlighted: highlightId === bill.bill_id }"
       >
-        <td class="small">
+        <td class="code small">
           {{ bill.bill_number || "—" }} <span class="muted">#{{ bill.bill_id }}</span>
         </td>
-        <td>{{ bill.arrival_date }}</td>
-        <td>
+        <td class="code">
+          {{ bill.arrival_date }}
+        </td>
+        <td class="code">
           {{ bill.hs_code || "—" }}
           <span
             v-if="bill.hs_suspect"
             class="badge excluded"
           >税号误码</span>
         </td>
-        <td>{{ bill.origin_country || "—" }}</td>
+        <td class="code">
+          {{ bill.origin_country || "—" }}
+        </td>
         <td class="small">
           {{ bill.shipper || "—" }}
         </td>

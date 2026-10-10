@@ -11,7 +11,7 @@ const STATUS_FILTERS: Array<{ value: JobStatus | ""; label: string }> = [
 ];
 
 const KIND_LABEL: Record<string, string> = {
-  find_contacts: "查找联系人",
+  find_contacts: "补全联系人",
   crawl_website: "抓取官网",
   verify_email: "邮箱验证",
   send_email: "发送邮件（二期）",
@@ -52,19 +52,25 @@ onBeforeUnmount(() => {
 <template>
   <div class="panel">
     <p class="eyebrow">
-      Job Queue
+      Task Queue
     </p>
-    <h1 style="margin-top: 0">
+    <h1>
       任务状态
     </h1>
     <p class="muted small">
       后台任务由 worker 进程执行（uv run python -m app.worker）；本页只读，每 10 秒自动刷新。
     </p>
-    <div class="filterbar">
+    <div
+      class="tabs"
+      role="tablist"
+      aria-label="任务状态筛选"
+    >
       <button
         v-for="f in STATUS_FILTERS"
         :key="f.value"
-        :class="{ primary: status === f.value }"
+        role="tab"
+        :aria-selected="status === f.value"
+        :class="{ active: status === f.value }"
         :data-testid="`job-filter-${f.value || 'all'}`"
         @click="setStatus(f.value)"
       >
@@ -89,51 +95,55 @@ onBeforeUnmount(() => {
     >
       当前没有任务。补全联系人与抓取官网的任务会出现在这里。
     </div>
-    <table
+    <div
       v-else
-      class="grid"
-      data-testid="jobs-table"
+      class="table-scroll"
     >
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>类型</th>
-          <th>状态</th>
-          <th>尝试</th>
-          <th>下次执行</th>
-          <th>最后错误</th>
-          <th>创建时间</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr
-          v-for="job in jobs"
-          :key="job.id"
-          :class="job.status === 'failed' ? 'rail-excluded' : undefined"
-        >
-          <td class="num">
-            {{ job.id }}
-          </td>
-          <td>{{ KIND_LABEL[job.kind] ?? job.kind }}</td>
-          <td>
-            <span :class="['badge', job.status === 'done' ? 'precise' : job.status === 'failed' ? 'excluded' : 'potential']">
-              {{ STATUS_FILTERS.find((f) => f.value === job.status)?.label ?? job.status }}
-            </span>
-          </td>
-          <td class="num">
-            {{ job.attempts }}/{{ job.max_attempts }}
-          </td>
-          <td class="code">
-            {{ job.run_after ?? "—" }}
-          </td>
-          <td class="small muted">
-            {{ job.last_error ?? "—" }}
-          </td>
-          <td class="code">
-            {{ job.created_at ?? "—" }}
-          </td>
-        </tr>
-      </tbody>
-    </table>
+      <table
+        class="grid"
+        data-testid="jobs-table"
+      >
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>类型</th>
+            <th>状态</th>
+            <th>尝试</th>
+            <th>下次执行</th>
+            <th>最后错误</th>
+            <th>创建时间</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="job in jobs"
+            :key="job.id"
+            :class="job.status === 'failed' ? 'rail-excluded' : undefined"
+          >
+            <td class="num">
+              {{ job.id }}
+            </td>
+            <td>{{ KIND_LABEL[job.kind] ?? job.kind }}</td>
+            <td>
+              <span :class="['badge', job.status === 'done' ? 'precise' : job.status === 'failed' ? 'excluded' : job.status === 'running' ? 'importer' : 'potential']">
+                {{ STATUS_FILTERS.find((f) => f.value === job.status)?.label ?? job.status }}
+              </span>
+            </td>
+            <td class="num">
+              {{ job.attempts }}/{{ job.max_attempts }}
+            </td>
+            <td class="code">
+              {{ job.run_after ?? "—" }}
+            </td>
+            <td class="small muted">
+              {{ job.last_error ?? "—" }}
+            </td>
+            <td class="code">
+              {{ job.created_at ?? "—" }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </template>

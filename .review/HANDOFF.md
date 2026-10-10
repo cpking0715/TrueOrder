@@ -444,3 +444,28 @@ verdict：**F1-F4 全部 verified**（复审通过读 fastapi 0.143 源码确认
 | F9 域名回写无 scheme（抽屉链接非法）+ worker 注释过时 | P2 | **成立，fixed** | 入库规范化 https:// 前缀；WebsiteField href 兜底；worker 文档字符串更新 |
 
 复核结论表全部 verified/按处理关闭。门禁：后端 **270 passed + smoke 5** + ruff 干净；前端 **44 passed** + eslint/vue-tsc/build 全绿。
+
+## 前端设计走查轮（Cursor，design-brief，2026-10-10）
+
+用户质疑前端优化质量后：先拍 7 张全量基准截图（`.review/frontend-audit/`，含 WP1/WP3/WP4 新组件首次整体截图），调 Cursor 只读走查（5 P1 + 8 P2 + 3 P3），逐条裁决处理：
+
+| 编号 | 结论 | 处理 |
+| --- | --- | --- |
+| D1[P1] 新组件引用 9 个从未定义的样式类（ghost/error/contact-form/list/panel、website-field、enrichbar、tags、badge.warn/muted）——WP1 会话写的组件对着不存在的样式表写，一直裸渲染 | **成立（复核属实，全部为 0 定义）** | main.css 补齐全部类；程序化审计锁定（ghost 透明底） |
+| D2[P1] 确认官网失败无反馈 | 成立 | 非编辑态加 error 节点 + 确认 busy 文案 |
+| D3[P1] 得分理由/提单证据被补全区挤到抽屉底部 | 成立 | 抽屉重排：摘要→得分理由→提单→官网→联系人（证据优先）；审计锁定顺序 |
+| D4[P1] 买家表行不可键盘操作 | 成立 | tabindex/role/Enter/Space + focus-visible 描边；新增键盘测试 |
+| D5[P1] 无 disabled 态、补全按钮可连点 | 成立 | 全局 :disabled（含 not-allowed）；补全/抓取 busy 防连点；EnrichBar busy 文案 |
+| D6[P2] 行内 style 绕过 token | 成立 | .input-narrow/.input-country/.stack-top/.panel>h1/.drawer h2 全部类化，清 8 处行内样式 |
+| D7[P2] 联系方式/提单码未走 mono | 成立 | email/phone/URL/提单号/HS/到港加 .code；ScoreSummary 日期改 code |
+| D8[P2] 两段式切换视觉弱 | 成立 | .enrichbar 琥珀左边轨容器 + 「第 2 步 · 确认消耗额度」步骤标 |
+| D9[P2] 联系人操作条主次不分 | 成立 | 拆 ContactsActions 子组件：补全=primary、抓取/新增=ghost |
+| D10[P2] 390px 表格溢出 | 成立 | .table-scroll 包三处表格；filterbar/enrichbar/contact-form 移动端纵排；审计 0 溢出 |
+| D11[P2] 同名冲突徽章装长句 | 成立 | 改 .alert 提示条 + 内嵌徽章 |
+| D12[P2] 任务页筛选实心主按钮、running/pending 同色 | 成立 | 改 tabs 模式（aria-selected）；running 用海关青徽章 |
+| D13[P2] 抽屉无焦点管理 | 成立（部分） | 打开即聚焦关闭按钮（审计锁定）；完整焦点陷阱留待后续 |
+| D14[P3] 动词不一致 | 成立 | 统一「补全联系人/抓取官网/导出买家 CSV」 |
+| D15[P3] 眉题英文不统一 | 成立 | Job Queue→Task Queue |
+| D16[P3] 琥珀对比度存疑 | **实测通过** | #8a5a00 on #faf0d7 = 5.22 ≥ 4.5（AA），不改 |
+
+门禁：前端 **45 passed**（+1 键盘测试）+ eslint/vue-tsc/build 全绿；Playwright 程序化复审 5 项全过（D1/D3/D4/D10/D13）。教训：这轮暴露 WP1 会话组件从未做过视觉集成验证——「组件测试绿」≠「长对了」，基准截图+走查应成为每个 WP 前端交付的门禁。

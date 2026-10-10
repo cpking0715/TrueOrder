@@ -200,7 +200,7 @@ watch(
         minShipments: filters.state.value.minShipments,
       }"
     />
-    <p style="margin-top: 12px">
+    <p class="stack-top">
       <a
         class="btn primary"
         :href="filters.exportUrl.value"
@@ -208,7 +208,7 @@ watch(
         data-testid="export-button"
         title="导出当前筛选的全部结果（不受列表显示条数限制）"
       >
-        导出当前筛选 CSV（全部）
+        导出买家 CSV（全部）
       </a>
       <a
         class="btn"

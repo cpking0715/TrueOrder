@@ -52,7 +52,7 @@ describe("JobsView", () => {
   it("渲染任务行：类型中文化、状态徽章、失败原因", async () => {
     render(JobsView);
     expect(await screen.findByTestId("jobs-table")).toBeTruthy();
-    expect(screen.getByText("查找联系人")).toBeTruthy();
+    expect(screen.getByText("补全联系人")).toBeTruthy();
     expect(screen.getByText("抓取官网")).toBeTruthy();
     expect(screen.getByText("RuntimeError: network down")).toBeTruthy();
     const table = screen.getByTestId("jobs-table").textContent ?? "";

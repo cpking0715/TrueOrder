@@ -87,11 +87,11 @@ void loadUsageHint();
         补全当前筛选前
         <input
           v-model.number="limit"
+          class="input-narrow"
           type="number"
           min="1"
           max="50"
           data-testid="enrich-limit"
-          style="width: 64px"
         >
         家的联系方式
       </label>
@@ -101,7 +101,7 @@ void loadUsageHint();
         data-testid="enrich-estimate"
         @click="askEstimate"
       >
-        估计额度
+        {{ busy ? "预估中…" : "预估额度" }}
       </button>
       <span
         v-if="executed"
@@ -110,6 +110,7 @@ void loadUsageHint();
       >{{ executed }}</span>
     </template>
     <template v-else>
+      <span class="eyebrow">第 2 步 · 确认消耗额度</span>
       <span
         class="small"
         data-testid="enrich-estimate-text"
@@ -120,7 +121,7 @@ void loadUsageHint();
         data-testid="enrich-confirm"
         @click="confirmRun"
       >
-        确认执行
+        {{ busy ? "执行中…" : "确认执行" }}
       </button>
       <button
         class="small ghost"
