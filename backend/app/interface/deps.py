@@ -23,9 +23,11 @@ def _session_factory():
 
 
 def get_session() -> Iterator[Session]:
+    """每请求独立会话：请求成功自动提交，异常回滚（写路径统一出口，repo 不再各自 commit）。"""
     session = _session_factory()()
     try:
         yield session
+        session.commit()
     finally:
         session.close()
 

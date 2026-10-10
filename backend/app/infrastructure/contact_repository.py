@@ -7,7 +7,7 @@ import io
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -119,6 +119,8 @@ class SqlContactRepository:
         normalized = normalize_email(email)
         if normalized is not None and not is_valid_email(normalized):
             return AddContactResult(None, "invalid_email")
+        if self._duplicate_exists(company_id, normalized):
+            return AddContactResult(None, "duplicate")
         contact = ContactORM(
             company_id=company_id,
             name=(name or "").strip() or None,
@@ -133,9 +135,24 @@ class SqlContactRepository:
         try:
             self._session.flush()
         except IntegrityError:
+            # 并发窗口兜底：唯一索引拦下，回滚保持会话可用（预查重已覆盖常规路径）
             self._session.rollback()
             return AddContactResult(None, "duplicate")
         return AddContactResult(_to_row(contact), None)
+
+    def _duplicate_exists(
+        self, company_id: int, normalized_email: str | None, exclude_contact_id: int | None = None
+    ) -> bool:
+        """公司内同邮箱查重（同事务内已 flush 的行也可见，导入循环内重复即时命中）。"""
+        if normalized_email is None:
+            return False
+        stmt = select(ContactORM.id).where(
+            ContactORM.company_id == company_id,
+            func.lower(ContactORM.email) == normalized_email,
+        )
+        if exclude_contact_id is not None:
+            stmt = stmt.where(ContactORM.id != exclude_contact_id)
+        return self._session.scalar(stmt) is not None
 
     def update(
         self, contact_id: int, *, name: str | None, title: str | None, email: str | None,
@@ -145,6 +162,16 @@ class SqlContactRepository:
         contact = self._session.get(ContactORM, contact_id)
         if contact is None:
             return None
+        # 先校验再改字段：invalid_email / duplicate 提前返回，不留脏改动
+        normalized_new = None
+        if email is not None:
+            normalized_new = normalize_email(email)
+            if normalized_new is not None and not is_valid_email(normalized_new):
+                return "invalid_email"
+            if self._duplicate_exists(
+                contact.company_id, normalized_new, exclude_contact_id=contact_id
+            ):
+                return "duplicate"
         if name is not None:
             contact.name = name.strip() or None
         if title is not None:
@@ -154,11 +181,8 @@ class SqlContactRepository:
         if do_not_contact is not None:
             contact.do_not_contact = do_not_contact
         if email is not None:
-            normalized = normalize_email(email)
-            if normalized is not None and not is_valid_email(normalized):
-                return "invalid_email"
-            contact.email = normalized
-            contact.is_generic = is_generic_email(normalized) if normalized else False
+            contact.email = normalized_new
+            contact.is_generic = is_generic_email(normalized_new) if normalized_new else False
         try:
             self._session.flush()
         except IntegrityError:
@@ -193,8 +217,14 @@ class SqlContactRepository:
     def import_csv(self, csv_text: str, source_ref: str = "contacts.csv") -> ContactsImportSummary:
         summary = ContactsImportSummary()
         for row_no, row in enumerate(csv.DictReader(io.StringIO(csv_text)), start=2):
-            company_id = self._resolve_company(row)
-            if company_id is None:
+            company_id, resolve_error = self._resolve_company(row)
+            if resolve_error == "missing_country":
+                summary.invalid_rows.append(f"第 {row_no} 行：按企业名定位必须提供国家")
+                continue
+            if resolve_error == "missing_target":
+                summary.invalid_rows.append(f"第 {row_no} 行：缺少 company_id 或企业名")
+                continue
+            if resolve_error == "not_found":
                 summary.company_not_found.append(f"第 {row_no} 行：企业未找到")
                 continue
             result = self.add(
@@ -217,23 +247,29 @@ class SqlContactRepository:
         self._session.commit()
         return summary
 
-    def _resolve_company(self, row: dict) -> int | None:
+    def _resolve_company(self, row: dict) -> tuple[int | None, str | None]:
+        """返回 (company_id, error)；error: 'missing_country' | 'not_found' | 'missing_target'。"""
         raw_id = (row.get("company_id") or "").strip()
         if raw_id.isdigit():
             if self.company_exists(int(raw_id)):
-                return int(raw_id)
-            return None
+                return int(raw_id), None
+            return None, "not_found"
         from app.domain.normalize import normalize_company_name, normalize_country
 
         name = normalize_company_name(row.get("company_name") or "")
-        country = normalize_country(row.get("country") or "") or "US"
         if not name:
-            return None
-        return self._session.scalar(
+            return None, "missing_target"
+        raw_country = (row.get("country") or "").strip()
+        if not raw_country:
+            # 静默默认 US 会把联系人错挂到同名美国公司：名称定位必须带国家
+            return None, "missing_country"
+        country = normalize_country(raw_country) or "US"
+        company_id = self._session.scalar(
             select(CompanyORM.id).where(
                 CompanyORM.normalized_name == name, CompanyORM.country == country
             )
         )
+        return company_id, None if company_id else "not_found"
 
     # ---------- 导出 ----------
 

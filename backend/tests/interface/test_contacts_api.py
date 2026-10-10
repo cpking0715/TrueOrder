@@ -203,3 +203,94 @@ class Test联系人导出:
         assert "dnc@ex.com" not in export_all
         assert "bad@ex.com" in export_all
         assert "keep@ex.com" in export_all
+
+
+class Test生产会话语义:
+    def test_联系人写入跨请求持久化(self, engine, monkeypatch):
+        """模拟生产 get_session（每请求独立会话）：写请求的数据必须在后续请求可见。
+
+        复现 blocker：repo 只 flush 不 commit 时，会话关闭即回滚，生产环境丢失全部写入。
+        """
+        from fastapi.testclient import TestClient
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+
+        from app.infrastructure.orm import Base
+        from app.interface import deps
+        from app.interface.main import create_app
+
+        engine_fresh = create_engine(
+            "postgresql+psycopg://trueorder:trueorder@localhost:5433/trueorder_test"
+        )
+        Base.metadata.drop_all(engine_fresh)
+        Base.metadata.create_all(engine_fresh)
+        monkeypatch.setattr(deps, "_session_factory", lambda: sessionmaker(bind=engine_fresh))
+        app = create_app()  # 不 override get_session：走真实的 deps.get_session
+        with TestClient(app) as client:
+            _seed(client)
+            ids = {
+                "company_id": None,
+                "product_id": 1,
+            }
+            precise = client.get("/api/products/1/buyers", params={"tier": "precise"}).json()
+            ids["company_id"] = precise["items"][0]["company_id"]
+            created = client.post(
+                f"/api/companies/{ids['company_id']}/contacts",
+                json={"name": "Persist", "email": "persist@ex.com"},
+            )
+            assert created.status_code == 201, created.text
+            listing = client.get(f"/api/companies/{ids['company_id']}/contacts")
+            emails = [c["email"] for c in listing.json()]
+            assert "persist@ex.com" in emails, f"写请求的数据丢失: {emails}"
+        engine_fresh.dispose()
+
+
+class Test导入与更新的脏写行为:
+    def test_导入中途重复不吞掉前面行(self, client):
+        ids = _seed(client)
+        cid = ids["company_id"]
+        pre = client.post(f"/api/companies/{cid}/contacts", json={"email": "dup@ex.com"})
+        assert pre.status_code == 201, pre.text
+        import csv
+        import io
+
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(
+            ["company_id", "company_name", "country", "name", "title", "email", "phone"]
+        )
+        writer.writerow([cid, "", "", "F", "", "first@ex.com", ""])
+        writer.writerow([cid, "", "", "D", "", "dup@ex.com", ""])
+        writer.writerow([cid, "", "", "S", "", "second@ex.com", ""])
+        csv_text = buf.getvalue()
+        body = client.post(
+            "/api/contacts/import", files={"file": ("c.csv", csv_text, "text/csv")}
+        ).json()
+        assert body["added"] == 2 and body["duplicates"] == 1
+        emails = {c["email"] for c in client.get(f"/api/companies/{cid}/contacts").json()}
+        assert {"first@ex.com", "second@ex.com"} <= emails, "中途重复回滚吞掉了前面行"
+
+    def test_坏邮箱422不改动其他字段(self, client):
+        ids = _seed(client)
+        contact_id = client.post(
+            f"/api/companies/{ids['company_id']}/contacts",
+            json={"name": "A", "title": "PM", "email": "a@b.com"},
+        ).json()["contact_id"]
+        r = client.patch(
+            f"/api/contacts/{contact_id}", json={"title": "GM", "email": "bad-email"}
+        )
+        assert r.status_code == 422
+        body = client.get(f"/api/companies/{ids['company_id']}/contacts").json()[0]
+        assert body["title"] == "PM", "422 前其他字段已被脏改"
+
+    def test_按名称定位缺国家归入无效行(self, client):
+        _seed(client)
+        csv_text = (
+            "company_id,company_name,country,name,title,email,phone\n"
+            ",BROOKLYN APPAREL,,NoCountry,,nc@ex.com,\n"
+        )
+        body = client.post(
+            "/api/contacts/import", files={"file": ("c.csv", csv_text, "text/csv")}
+        ).json()
+        assert body["added"] == 0
+        assert len(body["invalid_rows"]) == 1 and "国家" in body["invalid_rows"][0]
