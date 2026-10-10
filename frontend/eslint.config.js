@@ -14,6 +14,8 @@ const browserGlobals = {
   HTMLInputElement: "readonly",
   HTMLSelectElement: "readonly",
   KeyboardEvent: "readonly",
+  setInterval: "readonly",
+  clearInterval: "readonly",
   setTimeout: "readonly",
   URL: "readonly",
   URLSearchParams: "readonly",

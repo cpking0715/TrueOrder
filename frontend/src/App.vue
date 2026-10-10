@@ -10,6 +10,14 @@ import { RouterLink, RouterView } from "vue-router";
     >
       TrueOrder <span class="brand-sub">自家产品海外买家库</span>
     </RouterLink>
+    <nav class="topnav">
+      <RouterLink
+        to="/jobs"
+        class="topnav-link"
+      >
+        任务
+      </RouterLink>
+    </nav>
   </header>
   <main class="page">
     <RouterView />

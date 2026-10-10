@@ -39,6 +39,15 @@ uv run uvicorn app.interface.main:app --port 8000
 
 后端会自动托管 `frontend/dist`（若已构建），直接打开 <http://localhost:8000>。
 
+### 2b. 后台任务 worker（联系人补全/官网抓取需要，WP3+）
+
+```bash
+uv run python -m app.worker        # 轮询执行任务队列；Ctrl-C 停止
+uv run python -m app.worker --once # 只跑一轮（调试）
+```
+
+不启动 worker 时界面照常可用，只是补全任务停留在「待执行」；任务状态见界面右上「任务」页。
+
 ### 3. 前端（开发模式）
 
 ```bash

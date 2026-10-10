@@ -1,6 +1,7 @@
 import { createRouter, createWebHashHistory } from "vue-router";
 import ProductsView from "@/features/products/views/ProductsView.vue";
 import ProductDetailView from "@/features/products/views/ProductDetailView.vue";
+import JobsView from "@/features/jobs/views/JobsView.vue";
 
 export const router = createRouter({
   // hash 路由：后端静态托管时无需 SPA 回退
@@ -8,5 +9,6 @@ export const router = createRouter({
   routes: [
     { path: "/", name: "products", component: ProductsView },
     { path: "/products/:id", name: "product-detail", component: ProductDetailView },
+    { path: "/jobs", name: "jobs", component: JobsView },
   ],
 });

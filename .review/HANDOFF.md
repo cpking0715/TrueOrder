@@ -381,3 +381,20 @@ verdict：**F1-F4 全部 verified**（复审通过读 fastapi 0.143 源码确认
 最终状态：前端 35 passed（+5 防线）、lint 0 错、vue-tsc 通过、构建成功；后端 190 passed 未动。
 
 **合规快检（对并行会话 WP1 联系人功能）**：当前代码无任何外部按次查询实现（无 httpx/Hunter/Apollo/PDL；`finder` 仅为预留枚举），联系人来源仅 manual/csv/website 手工录入——不违反 AGENTS.md 硬约束。但 `docs/OUTREACH-COMPLIANCE.md` 规划的「按次查询补全（Hunter 等）」与硬约束「不接按次查询数据源入库存」**冲突**，实现前需用户明确裁决（改约束或改方案）。
+
+## WP3 任务队列与 worker（ZCode 主会话 2026-10-10，34b5eea 之后）
+
+按 DEV-SPEC v0.2 第一期顺序（WP0✅→WP1✅→**WP3**→WP4→WP7）交付：
+
+| 层 | 交付 | 测试 |
+| --- | --- | --- |
+| 领域 | `domain/jobs.py`：指数退避（60s×2^n 封顶 1h）、僵死阈值 10min、重试边界纯函数 + Job 实体 | 9 条（tests/domain/test_jobs.py） |
+| 基础设施 | `orm.JobORM`（JSONB payload、CHECK、认领部分索引）+ `infrastructure/jobs.py`（SqlJobQueue：FOR UPDATE SKIP LOCKED 认领/退避失败/僵死回收/永久失败；Worker.run_once 分发） | 18 条（认领互斥、交错不重复、退避时刻、上限置 failed、回收、未知类型永久失败） |
+| 迁移 | `d5bbf21b2e42_wp3_jobs_table` 链在 244c6cd8340a，autogenerate 生成过 compare_metadata 一致性 | 旧库模拟测试同步剥 jobs 表（create_all 时代库不含它） |
+| 接口 | `GET /api/jobs?status=` 只读（JobOut/JobsListOut） | 4 条 |
+| 进程 | `python -m app.worker`（--once/--interval，空注册表安全：未知类型永久失败并在状态页可见） | 实跑 rc 0 |
+| 前端 | `#/jobs` 任务状态页（10s 自动刷新、状态过滤、类型中文化、失败红轨）+ 顶栏「任务」导航 | 3 条组件测试 |
+
+门禁：后端 **221 passed** + ruff 干净；前端 **38 passed** + eslint 0 错 + vue-tsc 通过 + 构建成功。冒烟（Playwright + 真实 worker 进程）：入队→worker --once 消费→状态页渲染类型/失败原因→过滤交互，截图 `screenshots/08-jobs-page.png`。
+
+设计取舍：worker 处理器注册表本期为空（WP4 挂 find_contacts/crawl_website），空表下队列语义已全部锁定；队列每方法自带 commit，处理器异常走 rollback+退避，与既有「响应前显式 commit」惯例一致。

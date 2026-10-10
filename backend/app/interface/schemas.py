@@ -176,3 +176,22 @@ class ContactsImportOut(BaseModel):
     duplicates: int
     company_not_found: list[str]
     invalid_rows: list[str]
+
+
+class JobOut(BaseModel):
+    """任务状态页的一行（只读，worker 在独立进程消费队列）。"""
+
+    id: int
+    kind: str
+    payload: dict
+    status: str
+    attempts: int
+    max_attempts: int
+    run_after: datetime | None = None
+    last_error: str | None = None
+    created_at: datetime | None = None
+
+
+class JobsListOut(BaseModel):
+    items: list[JobOut]
+    total: int

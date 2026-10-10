@@ -108,7 +108,8 @@ class Test迁移:
 
         engine = create_engine(MIG_URL)
         Base.metadata.create_all(engine)
-        with engine.begin() as conn:  # 剥掉 WP1 新增对象 = 模拟历史版本的库
+        with engine.begin() as conn:  # 剥掉 WP1/WP3 新增对象 = 模拟历史版本的库
+            conn.execute(text("DROP TABLE jobs"))
             conn.execute(text("DROP TABLE contacts"))
             conn.execute(text("ALTER TABLE companies DROP COLUMN website"))
             conn.execute(text("ALTER TABLE companies DROP COLUMN website_confirmed"))
@@ -140,7 +141,8 @@ class Test旧库接管:
         engine = create_engine(MIG_URL)
         Base.metadata.create_all(engine)
         with engine.begin() as conn:
-            # 剥掉 WP1 新增对象与表达式索引 = 模拟迁移前的历史库
+            # 剥掉 WP1/WP3 新增对象与表达式索引 = 模拟迁移前的历史库
+            conn.execute(text("DROP TABLE jobs"))
             conn.execute(text("DROP TABLE contacts"))
             conn.execute(text("ALTER TABLE companies DROP COLUMN website"))
             conn.execute(text("ALTER TABLE companies DROP COLUMN website_confirmed"))

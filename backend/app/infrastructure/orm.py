@@ -23,7 +23,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSON, TSVECTOR
+from sqlalchemy.dialects.postgresql import ARRAY, JSON, JSONB, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -200,3 +200,39 @@ class ContactORM(Base):
     )
     verify_status: Mapped[str] = mapped_column(String(16), default="unknown")
     do_not_contact: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class JobORM(Base):
+    """后台任务（WP3）：基于 PostgreSQL 的队列，认领用 FOR UPDATE SKIP LOCKED。"""
+
+    __tablename__ = "jobs"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending','running','done','failed')", name="ck_jobs_status"
+        ),
+        CheckConstraint(
+            "kind IN ('send_email','find_contacts','crawl_website','poll_imap')",
+            name="ck_jobs_kind",
+        ),
+        # 认领路径只扫待跑任务
+        Index(
+            "ix_jobs_pending",
+            "run_after",
+            postgresql_where=text("status = 'pending'"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(32))
+    payload: Mapped[dict] = mapped_column(JSONB, default=dict)
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    run_after: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, default=3)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

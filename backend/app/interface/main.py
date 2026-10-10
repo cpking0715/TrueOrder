@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.interface.routers import bills, contacts, meta, products
+from app.interface.routers import bills, contacts, jobs, meta, products
 
 
 def create_app() -> FastAPI:
@@ -28,6 +28,7 @@ def create_app() -> FastAPI:
     app.include_router(products.router)
     app.include_router(bills.router)
     app.include_router(contacts.router)
+    app.include_router(jobs.router)
 
     _mount_frontend(app)
     return app
