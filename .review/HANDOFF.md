@@ -226,3 +226,27 @@ base=1351d68  head=7266ca6
 4. **公式注入**：转义前缀集合是否够（`= + - @ \t \r \n`）；`sanitize_csv_cell` 对非字符串（date/int）的处理。
 5. **迁移一致性测试**的强度：`test_迁移后ORM建表为空操作` 只比表集合，不比列/索引/约束级差异，是否可接受。
 6. CI workflow 的 PG 服务与 conftest 建库权限（POSTGRES_USER 即 superuser）假设。
+
+## Findings 台账（Claude Code 独立审阅 2026-10-10，对 7266ca6；修复轮 9261b99）
+
+审阅产出 7 条（1 major / 6 minor），逐条独立核实后处理：
+
+| 编号 | 严重度 | 结论 | 处理 |
+| --- | --- | --- | --- |
+| F1 `.zcodeignore` 被一并提交（HANDOFF 声称未跟踪，与事实不符） | minor | **成立，fixed** | `git rm --cached` 移出 + `.gitignore` 加规则；根因是 git_commit 工具把未跟踪文件一并 add，下轮交接前先核对 `git status` 未跟踪清单 |
+| F2 旧库接管 stamp 到 head，增量迁移（表达式索引）被跳过，仅新库有索引 | **major** | **成立，fixed** | `_ensure_schema` 改 stamp 基线 `df993f8cbfd2` 后照常 `upgrade head`；复现测试 `旧库经ensure_schema补齐增量索引`（先红后绿）。注：本机开发库因曾手动 upgrade 掩盖了此路径缺陷——我的实跑验证口径太弱，只验了"不报错+种子幂等"没验索引存在 |
+| F3 迁移一致性测试只比表集合，看不到列/索引/约束漂移 | minor | **成立，fixed** | 升级为 `compare_metadata` 全量比对断言空 diff（实测无噪音）；CI 增加 `alembic check` 步骤 |
+| F4 导入公司缓存只在新建分支填充，库里查到的公司不缓存，二次导入仍逐行查库；`\| None` 注解无用 | minor | **成立，fixed** | existing 分支补写缓存，类型改 `dict[str, CompanyORM]`；行为锁测试 `库中既有公司在批内也被缓存`（scalar 计数 ≤ 公司数，先红后绿）。变体等价性结论与审阅一致（焦点 1 无缺陷） |
+| F5 413 检查在 `await file.read()` 之后，超大文件先整读进内存 | minor | **成立，fixed** | 两导入端点加 `Content-Length` 请求头预检（读前拒绝），保留读后字节检查兜底 chunked 无头请求；功能性区分不写专项测试（内存行为难在 TestClient 断言），现有 413 用例继续锁行为 |
+| F6a `create_quick` 裸 `session.rollback()` 会波及外层事务其他未提交改动 | minor | **成立，fixed** | 改 `begin_nested()`（SAVEPOINT），撞号只回滚本次插入；现有端点路径本无前置写（审阅确认），此修复保护未来调用方 |
+| F6b 409 查重与插入非原子：并发同 payload 双双通过检查创建重复产品 | minor | **记录为已知限制（open）** | 单用户本地系统 + 前端提交防重，触发面极窄，后果仅为可手动删除的重复产品；根治需给 quick 产品加唯一约束（会波及 CSV 多 code 同名产品路径），留待 WP1 建联系人时统一评估数据模型 |
+| F7 迁移测试库 URL 硬编码 localhost:5433，非常规配置失效 | minor | **rejected（保持现状）** | 与既有 `tests/infra/conftest.py`、`tests/interface/conftest.py` 同一口径（CI 恰好同配置）；配置化是独立于 WP0 的测试基建改进，避免本轮范围膨胀 |
+
+修复轮验证（9261b99）：
+
+| 命令 | 结果 |
+| --- | --- |
+| `uv run pytest -q` | **153 passed**（+2 新复现/行为锁） |
+| `uv run pytest -q -m smoke` | **2 passed** |
+| `uv run ruff check .` | All checks passed |
+| `uv run python -m app.bootstrap` | 幂等（重复 26 票，索引在位） |
