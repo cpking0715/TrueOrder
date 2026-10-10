@@ -11,9 +11,9 @@ from datetime import datetime, timedelta
 from typing import Any, Literal
 
 JobStatus = Literal["pending", "running", "done", "failed"]
-# 任务种类：第一期实际产生 find_contacts / crawl_website；
+# 任务种类：第一期实际产生 find_contacts / crawl_website / verify_email（配 Hunter Key 时）；
 # send_email / poll_imap 为第二期预留（见 DEV-SPEC 3.2）。
-JobKind = Literal["send_email", "find_contacts", "crawl_website", "poll_imap"]
+JobKind = Literal["send_email", "find_contacts", "crawl_website", "poll_imap", "verify_email"]
 
 DEAD_TASK_TIMEOUT = timedelta(minutes=10)
 BACKOFF_BASE = timedelta(seconds=60)

@@ -13,6 +13,7 @@ const STATUS_FILTERS: Array<{ value: JobStatus | ""; label: string }> = [
 const KIND_LABEL: Record<string, string> = {
   find_contacts: "查找联系人",
   crawl_website: "抓取官网",
+  verify_email: "邮箱验证",
   send_email: "发送邮件（二期）",
   poll_imap: "收取回复（二期）",
 };

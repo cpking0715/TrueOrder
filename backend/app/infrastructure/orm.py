@@ -213,7 +213,7 @@ class JobORM(Base):
             "status IN ('pending','running','done','failed')", name="ck_jobs_status"
         ),
         CheckConstraint(
-            "kind IN ('send_email','find_contacts','crawl_website','poll_imap')",
+            "kind IN ('send_email','find_contacts','crawl_website','poll_imap','verify_email')",
             name="ck_jobs_kind",
         ),
         # 认领路径只扫待跑任务

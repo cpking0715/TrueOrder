@@ -418,3 +418,29 @@ verdict：**F1-F4 全部 verified**（复审通过读 fastapi 0.143 源码确认
 设计取舍与规格偏离（1 处，已在代码注释与本表记录）：
 - 3.6 写「没有 website 不调用接口」，但 1.4.1 交付标准与 3.7 第 1 条要求「系统自动补全域名」——两者矛盾。实现取后者：无官网时仍按公司名调 finder 做**域名发现**（Hunter domain-search 支持传公司名；fake 同样支持），高置信自动采用后继续查联系人，中低置信只写候选等人工确认。额度与审计（enrichment_calls）两条路径都生效。
 - `docs/finder-eval.md` 已建占位：真实 Hunter 命中率评估需要用户提供 API Key 后手工执行（10 家样本），当前无 Key 走 fake 演示源、来源可辨识不污染真实数据。
+
+## WP7 第一期收尾（ZCode 主会话 2026-10-10，c19fe49）
+
+- e2e 冒烟（`-m smoke`，4 条）：新增两条获客闭环——①选企业补全（fake）→ 域名/联系人写入（source=finder、fake 标注、verify unknown）→ 额度审计 → 联系人导出列与内容校验；②批量补全估计（不入队）→ 确认执行 → worker 消费 → 二次估计两类跳过全部生效（candidates=0）。
+- README 增「第一期获客流程」四步 + 截图索引；OUTREACH-COMPLIANCE 增「实现现状核对」表（8 项逐条对照实现位置）；AGENTS.md 必测点补后台任务/补全/爬虫与前端两段式。
+- 门禁：后端 265 + smoke 4 + ruff 干净；前端 43 + eslint/vue-tsc 通过。
+
+**第一期（WP0-WP4、WP7）交付完成。** 遗留：真实 Hunter 命中率评估（docs/finder-eval.md，待用户提供 API Key）；WP3/WP4/WP7 独立审阅进行中（brief-4）。
+
+## 独立审阅轮 4 处理（ZCode 主会话 2026-10-10，对 add2a70..c19fe49，brief-4）
+
+审阅返回 1 P0 + 5 P1 + 3 P2，逐条核实全部成立并修复：
+
+| 编号 | 严重度 | 结论 | 处理 |
+| --- | --- | --- | --- |
+| F1 verify_email 不在 jobs.kind CHECK，配 Hunter Key 后验证任务入队即 IntegrityError | **P0** | **成立，fixed** | 迁移 a7c3e91d5f02 放宽 CHECK + ORM/JobKind/前端文案同步；先红后绿测试「有 key 时排 verify_email 且可被 worker 消费→verify_status=valid」 |
+| F2 FakeContactFinder 回显 domain_country=None → 域名发现永远 medium、演示路径丢联系人 | P1 | **成立，fixed** | ContactFinder.find 增加 company_country 参数（端口+两适配器），fake 回显公司国家使名称对齐时达 high；「真实 make_finder() 域名发现」集成测试先红后绿 |
+| F3 额度检查与记账非原子，多 worker 并发超扣 | P1 | **成立，fixed** | reserve()：pg_advisory_xact_lock + 独立短事务计数并预插审计行（ok=False），mark_ok 成功后翻转；两公司 cap=1 并发测试：一家 done、一家延期、仅一条记账 |
+| F4 额度用尽走永久失败（明日不重跑）且批量不预留 | P1 | **成立，fixed** | QuotaDeferred（携带 run_after）→ queue.defer()：回 pending、attempts 不增、延期到明日；测试改锁延期语义 |
+| F5 重试/僵死回收会再次外呼扣费 | P1 | **成立，fixed** | 处理器入口按 ok_only 成功记录 30 天短路；mark_ok 在联系人落库后翻转（此前崩溃重试会再查）；「两次执行只调一次 finder」测试 |
+| F6 爬虫 SSRF DNS TOCTOU（校验后连接重新解析，可被 rebinding） | P1 | **成立，fixed** | _PinnedBackend：连接强制走已校验 IP（挂 httpx 内部连接池），TLS/SNI 仍按原主机；钉扎单元测试（不存在的主机名钉到夹具 IP 能连通） |
+| F7 EnrichBar 用 candidates 禁用，额度耗尽时仍可点确认 | P2 | **成立，fixed** | 禁用条件改 credits_needed===0；文案区分「今日可执行 N 家（额度不足明日自动排）」；Vitest 补截断场景 |
+| F8 冒烟未锁域名发现闭环/批量不断言联系人 | P2 | **成立，fixed** | 冒烟新增「无官网→域名发现→高置信自动确认→联系人自动写入」全链路；批量用例补联系人断言（该用例原有） |
+| F9 域名回写无 scheme（抽屉链接非法）+ worker 注释过时 | P2 | **成立，fixed** | 入库规范化 https:// 前缀；WebsiteField href 兜底；worker 文档字符串更新 |
+
+复核结论表全部 verified/按处理关闭。门禁：后端 **270 passed + smoke 5** + ruff 干净；前端 **44 passed** + eslint/vue-tsc/build 全绿。

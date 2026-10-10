@@ -43,7 +43,7 @@ class CompanyImportSink(Protocol):
 class ContactFinder(Protocol):
     """按次联系人补全端口（hunter/fake 适配器可整体替换）。"""
 
-    def find(self, domain: str, company_name: str) -> FinderResult: ...
+    def find(self, domain: str, company_name: str, company_country: str = "") -> FinderResult: ...
 
     def verify(self, email: str) -> str:
         """返回 valid | invalid | unknown（不可判定时 unknown）。"""

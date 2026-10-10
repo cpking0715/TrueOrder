@@ -1,8 +1,8 @@
 """后台任务 worker：`uv run python -m app.worker` 轮询认领并执行队列任务。
 
-处理器的注册表目前为空（第一期 WP4 会挂 find_contacts / crawl_website）；
-空注册表下 worker 仍可安全运行——未知类型的任务会被永久标记 failed 并写明原因，
-便于在任务状态页发现配置遗漏。
+处理器注册表见 app.infrastructure.enrichment.build_registry：
+find_contacts / crawl_website / verify_email（verify 仅配置 Hunter Key 后产生）。
+未知类型的任务会被永久标记 failed 并写明原因，便于在任务状态页发现配置遗漏。
 """
 
 from __future__ import annotations

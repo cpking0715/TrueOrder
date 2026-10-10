@@ -76,7 +76,7 @@ async function confirm() {
       官网：
       <a
         v-if="current"
-        :href="current"
+        :href="current.startsWith('http') ? current : `https://${current}`"
         target="_blank"
         rel="noopener"
       >{{ current }}</a>

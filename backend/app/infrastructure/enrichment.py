@@ -13,7 +13,7 @@ from app.domain.ports import ContactFinder as ContactFinderProtocol
 from app.infrastructure.contact_finders import make_finder
 from app.infrastructure.contact_repository import SqlContactRepository
 from app.infrastructure.crawler import CrawlBlocked, WebsiteCrawler
-from app.infrastructure.jobs import PermanentJobError, SqlJobQueue
+from app.infrastructure.jobs import PermanentJobError, QuotaDeferred, SqlJobQueue
 from app.infrastructure.orm import CompanyORM, ContactORM, EnrichmentCallORM
 
 
@@ -43,19 +43,59 @@ class SqlEnrichmentLog:
         self._session.flush()
 
     def companies_queried_within(
-        self, company_ids: list[int], days: int = 30
+        self, company_ids: list[int], days: int = 30, ok_only: bool = True
     ) -> set[int]:
-        """days 天内查过补全的公司（无论成败）——批量补全时不重复查。"""
+        """days 天内查过补全的公司。ok_only=True 只算成功外呼（失败调用不黑名单 30 天）。"""
         if not company_ids:
             return set()
         since = datetime.now(UTC) - timedelta(days=days)
-        rows = self._session.scalars(
-            select(EnrichmentCallORM.company_id).where(
-                EnrichmentCallORM.company_id.in_(company_ids),
-                EnrichmentCallORM.called_at >= since,
-            )
+        stmt = select(EnrichmentCallORM.company_id).where(
+            EnrichmentCallORM.company_id.in_(company_ids),
+            EnrichmentCallORM.called_at >= since,
         )
-        return set(rows)
+        if ok_only:
+            stmt = stmt.where(EnrichmentCallORM.ok.is_(True))
+        return set(self._session.scalars(stmt))
+
+    def reserve(self, provider: str, company_id: int, cap: int) -> int | None:
+        """额度预留：advisory lock + 独立短事务内计数并插入审计行（ok=False）。
+
+        多 worker 并发下互斥，杜绝「同时读到 used<cap 而双双外呼」的超扣；
+        返回审计行 id，额度已满返回 None。外呼成功后调 mark_ok 翻转。
+        """
+        from sqlalchemy import text as sql_text
+        from sqlalchemy.orm import Session as _S
+
+        engine = self._session.bind
+        with _S(engine) as tx:
+            tx.execute(sql_text("select pg_advisory_xact_lock(918273645)"))
+            used = tx.scalar(
+                sql_text(
+                    "select coalesce(sum(credits_used), 0) from enrichment_calls "
+                    "where called_at::date = current_date"
+                )
+            )
+            if int(used or 0) >= cap:
+                tx.rollback()
+                return None
+            row = EnrichmentCallORM(
+                provider=provider, company_id=company_id, credits_used=1, ok=False
+            )
+            tx.add(row)
+            tx.flush()
+            record_id = row.id
+            tx.commit()  # 提交即释放 advisory lock
+            return record_id
+
+    def mark_ok(self, record_id: int) -> None:
+        from sqlalchemy.orm import Session as _S
+
+        engine = self._session.bind
+        with _S(engine) as tx:
+            row = tx.get(EnrichmentCallORM, record_id)
+            if row is not None:
+                row.ok = True
+                tx.commit()
 
 
 def _company_display_name(company: CompanyORM) -> str:
@@ -90,10 +130,19 @@ def make_find_contacts_handler(
             raise PermanentJobError(f"公司 {company_id} 不存在")
         cfg = settings or get_settings()
         log = SqlEnrichmentLog(session)
-        used = log.calls_today()
-        if used >= cfg.enrich_daily_cap:
-            raise PermanentJobError(
-                f"今日补全调用已达上限（{used}/{cfg.enrich_daily_cap}），明天再试"
+
+        # F5 幂等短路：30 天内成功外呼过 → 不再调用补全服务（含崩溃重试场景）
+        if company_id in log.companies_queried_within([company_id]):
+            return
+
+        # F3 额度原子预留：先记账（advisory lock）再外呼；额度是日滚动资源，
+        # 用尽 → 延期到明日（F4），不是失败。
+        provider = "hunter" if cfg.hunter_api_key else "fake"
+        record_id = log.reserve(provider, company_id, cap=cfg.enrich_daily_cap)
+        if record_id is None:
+            raise QuotaDeferred(
+                datetime.now(UTC) + timedelta(days=1),
+                f"今日补全额度已用尽（上限 {cfg.enrich_daily_cap}），延期到明日重跑",
             )
 
         # 域名发现（3.7 第 1 条）：无官网/官网未确认时仍可按公司名查域名；
@@ -104,9 +153,8 @@ def make_find_contacts_handler(
         result = active_finder.find(
             _website_host(website_raw) if website_raw else "",
             _company_display_name(company),
+            company.country,
         )
-        provider = "hunter" if cfg.hunter_api_key else "fake"
-        log.record(provider, company_id)
 
         adopted_high = False
         if result.domain and not had_usable:
@@ -116,7 +164,10 @@ def make_find_contacts_handler(
                 result.domain_country or "",
                 company.country,
             )
-            company.website = result.domain
+            website = result.domain.strip()
+            if website and "://" not in website:
+                website = f"https://{website}"  # 入库规范化为绝对 URL（F9）
+            company.website = website
             company.website_source = "finder"
             company.website_confidence = confidence
             if confidence == "high":
@@ -125,6 +176,7 @@ def make_find_contacts_handler(
             session.flush()
 
         if not (had_usable or adopted_high):
+            log.mark_ok(record_id)  # 已外呼（产出候选）：计入成功，防 30 天内重复查
             return  # 中低置信候选：联系人不自动查，等用户确认官网
 
         repo = SqlContactRepository(session)
@@ -141,6 +193,8 @@ def make_find_contacts_handler(
             )
             if added.contact is not None:
                 new_ids.append(added.contact.contact_id)
+
+        log.mark_ok(record_id)  # 联系人落库后翻转审计；此后崩溃重试会被短路（F5）
 
         # 自动验证（DEV-SPEC 3.7 第 3 条）：有 Hunter key 才排验证任务
         if new_ids and cfg.hunter_api_key:

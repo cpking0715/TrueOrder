@@ -1,0 +1,72 @@
+# FINDINGS — Brief 4（WP3/WP4/WP7，`add2a70^..c19fe49`）
+
+### F1 [P0] `verify_email` 不在 jobs.kind CHECK / JobKind 内，有 Hunter Key 时自动验证链路必炸
+- 位置：`backend/app/infrastructure/orm.py:216`；`backend/alembic/versions/d5bbf21b2e42_wp3_jobs_table.py:35`；`backend/app/domain/jobs.py:16`；`backend/app/infrastructure/enrichment.py:146-149`
+- 问题：处理器在写入联系人后 `enqueue("verify_email", …)`，但表约束与领域字面量只允许 `send_email|find_contacts|crawl_website|poll_imap`。配置 `TRUEORDER_HUNTER_API_KEY` 后插入即违反 `ck_jobs_kind`。
+- 影响：联系人可能已由 `repo.add` 行级 commit 落库，随后 enqueue 抛错 → Worker 当可重试失败；重试再调 Finder、再扣额度，最终任务 `failed`，`verify_status` 永不更新。DEV-SPEC 3.7.3「自动排验证任务」在真实 Key 路径上不可用；现有测试只锁「无 Key 不排验证」，掩盖此路径。
+- 建议：迁移放宽 CHECK（并同步 `JobKind` / 前端任务类型文案）纳入 `verify_email`；补「有 Key 时入队 verify_email 且可被 worker 消费」的先红后绿测试。
+
+### F2 [P1] 演示源 `FakeContactFinder` 的 `domain_country=None` 使域名发现永远达不到 high，联系人被丢弃
+- 位置：`backend/app/infrastructure/contact_finders/__init__.py:36-40`；`backend/app/infrastructure/enrichment.py:112-128`；`backend/app/domain/contacts.py:106-108`
+- 问题：`website_confidence` 要求国家字符串全等才为 high；fake 固定 `domain_country=None` → 与企业 `country`（如 `US`）比较失败 → 最多 medium。处理器在 medium/low 时只写官网候选并 `return`，同次 Finder 已返回的 `contacts` 不入库。
+- 影响：无 Hunter Key（默认演示）且未预填已确认官网时，「查找联系方式」只会留下黄标候选、无联系人，与 3.7「高置信自动采用并继续查联系人」及 AGENTS 获客闭环口径不符。单元测试用注入的 `FakeFinder(domain_country="US")`，未覆盖真实 `FakeContactFinder`。
+- 建议：fake 在名称已对齐时返回与公司一致的国家（或扩展 `find` 传入 country）；并增加「无官网 + 真实 make_finder()」集成测试，断言自动确认官网且联系人入库。
+
+### F3 [P1] 额度检查与记账非原子，多 worker 可并发超扣
+- 位置：`backend/app/infrastructure/enrichment.py:93-97,109`；`backend/app/infrastructure/jobs.py:66-82,152-164`
+- 问题：`calls_today()` 只统计已写入的 `enrichment_calls`；认领后、`record` 前无预留/锁。多 worker（必测点含双 worker）可同时看到 `used < cap` 并各自调用外部源再 `record`。
+- 影响：日上限可被突破，违反「有每日调用上限」硬约束；外部按次费用可能超预期。
+- 建议：在同一事务内用额度行/`SELECT … FOR UPDATE` 预留，或 `INSERT` 审计行后立刻按 `SUM(credits_used)` 校验并失败回滚；补双会话并发超扣复现测试。
+
+### F4 [P1] 额度用尽走永久失败，且批量入队不预留额度
+- 位置：`backend/app/infrastructure/enrichment.py:94-97`；`backend/app/interface/routers/enrich.py:156-174`；`backend/tests/infra/test_enrichment.py:156-168`
+- 问题：执行时 `used >= cap` 抛 `PermanentJobError` → `fail_permanent`，明日也不会重跑。批量 `confirm` 仅按当时 `remaining` 截断入队，不占用额度；估计→确认之间或确认后、执行前的单公司入队可先耗尽额度。测试把「超额永久失败」写成预期，锁死了错误语义。
+- 影响：用户已确认入队的任务会变红失败且不可恢复，与「N ≤ 当日剩余额度」的产品预期不符（额度是日滚动资源，不是确定性业务拒绝）。
+- 建议：额度不足改为延期（`run_after=次日`）或可重试失败，勿 `fail_permanent`；确认入队时写入预留/占位审计；改测试锁定延期语义。
+
+### F5 [P1] 任务重试/僵死回收会再次调用 Finder 并再次扣额度
+- 位置：`backend/app/infrastructure/enrichment.py:86-149`；`backend/app/infrastructure/jobs.py:115-132,161-170`；`backend/app/infrastructure/contact_repository.py:122-142`
+- 问题：处理器不检查 30 天内是否已查过；`repo.add` 行级 commit 后若在 `complete` 前崩溃/僵死回收，重跑会再次 `finder.find` + `log.record`。邮箱唯一索引只避免重复联系人，不阻止重复计费与重复外呼。批量 API 的 `companies_queried_within` 不作用于单公司入口与 worker 重试。
+- 影响：一次用户触发可能多次消耗日额度与外部配额；审计「查过一次」失真。
+- 建议：处理器开头按 company 做 30 天短路（或 job 级 idempotency key）；仅在首次成功外呼后 `record`；崩溃重试用「已有本次审计/结果」跳过外呼。
+
+### F6 [P1] 爬虫 SSRF：DNS 校验与真实连接存在 TOCTOU
+- 位置：`backend/app/infrastructure/crawler.py:50-62,117-130`
+- 问题：`_host_is_fetchable` 用 `getaddrinfo` 判私网后，`httpx.Client.get` 再次解析主机名建立连接，未把连接钉在已校验 IP 上。重定向链虽每跳复检主机，但仍是「先解析、再让客户端自己解析」。
+- 影响：恶意/不可信官网可对 DNS 重绑定，使 worker 在校验通过后访问回环/链路本地/内网（含云 metadata 类地址），SSRF 护栏不完整。
+- 建议：解析后对通过校验的 IP 用自定义 transport/`connect` 直连该 IP，并用原 host 做 SNI/Host；禁止连接时重新解析；补 DNS 重绑定夹具测试。
+
+### F7 [P2] EnrichBar 用 `candidates===0` 禁用确认，额度截断为 0 时仍可点「确认执行」
+- 位置：`frontend/src/features/products/components/EnrichBar.vue:118`；`backend/app/interface/routers/enrich.py:156-166`
+- 问题：`candidates` 是额度截断前的合格数；`credits_needed`/`to_run` 才是实际可入队数。`remaining=0` 且仍有合格企业时，`candidates>0`、`credits_needed=0`，确认按钮仍可用，执行结果 `enqueued=0`。
+- 影响：两段式状态机在额度耗尽场景误导用户；前端测试只覆盖 `candidates: 0`，未锁 `capped_by_quota` 场景。
+- 建议：禁用条件改为 `credits_needed===0`（或 `candidates===0 && credits_needed===0`）；文案区分「可补全」与「今日可执行」；补 Vitest。
+
+### F8 [P2] 新增 smoke 未覆盖「无官网域名自动写入→联系人」，批量用例甚至不断言联系人
+- 位置：`backend/tests/smoke/test_smoke.py:113-188`
+- 问题：`test_补全到联系人导出闭环` 先 PATCH 确认官网再补全，未走域名发现；`test_批量补全估计与执行` 只断言入队/done/二次跳过，不检查联系人或官网字段。在 F2 下批量 smoke 仍可通过。
+- 影响：文档与用例描述的「域名与联系人自动写入 → 验证状态 → 导出」闭环未被真正锁住；回归（含 F1/F2）可静默溜走。
+- 建议：补「无官网 + fake/注入高置信」与「有 Key 时 verify 入队」两条；批量用例断言至少一家写入 `source=finder` 联系人。
+
+### F9 [P2] 域名发现写入无 scheme 的 website，抽屉链接可能非法；worker 模块注释过时
+- 位置：`backend/app/infrastructure/enrichment.py:119`；`frontend/src/features/products/components/WebsiteField.vue:77-81`；`backend/app/worker.py:3-5`
+- 问题：回写多为裸域名/`www.…`；前端 `<a :href="current">` 无补 `https://`。`worker.py` 仍写「注册表为空（WP4 会挂…）」，与 `build_registry()` 不符。
+- 影响：确认/展示官网时链接行为异常；运维读注释会误判 worker 未挂处理器。
+- 建议：入库前规范化为 `https://` 绝对 URL；展示层兜底补 scheme；更新 worker 文档字符串。
+
+---
+
+## 复核结论表
+
+| 编号 | 状态 | 一句话 |
+| --- | --- | --- |
+| 额度并发 / 入队与执行一致性 | **verified（有缺陷）** | 见 F3、F4：检查与记账无预留；超额永久失败会丢掉已入队任务 |
+| 爬虫 SSRF / 重定向 / robots | **verified（部分缺口）** | 重定向每跳复检与私网用例在；DNS TOCTOU 见 F6；robots 不可达按允许为代码内明示取舍 |
+| 永久失败 vs 退避边界 | **verified（有缺陷）** | robots/无公司/无官网 → 永久失败合理；额度用尽不应永久失败（F4）；首页失败 `RuntimeError` 可重试合理 |
+| 事务 / 联系人幂等 | **verified（部分）** | 同邮箱靠唯一索引与预查重；重试仍重复外呼与扣费（F5） |
+| worker 会话 / Ctrl-C / 空注册表 | **verified** | 每轮新会话、`KeyboardInterrupt` 退出；现注册三处理器，未知 kind 永久失败；注释过时见 F9 |
+| 接口两段式与状态码 | **verified（基本一致）** | 估计不入队、confirm 按剩余截断、202/422/404 语义正确；执行时点仍受 F3/F4 影响 |
+| 前端 EnrichBar / WebsiteField / ContactsPanel | **verified（有缺口）** | 两段式与入队提示有测试；确认禁用条件见 F7；`@confirmed`→抽屉 reload 链路存在 |
+| 冒烟质量 | **verified（偏弱）** | 见 F8：偏 happy path，未锁域名自动发现与验证任务 |
+| 已知取舍（域名发现 vs「无官网不调接口」、fake 标注、jobs 目录补交） | **verified** | 按 HANDOFF 取舍落地，本轮不重复开单 |
+| **新发现** | **有 P0/P1** | **P0：F1**；**P1：F2–F6**；P2：F7–F9 |

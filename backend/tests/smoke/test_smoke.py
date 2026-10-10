@@ -186,3 +186,27 @@ class Test第一期获客闭环冒烟:
         ).json()
         assert again["candidates"] == 0
         assert again["skipped_queried_recently"] + again["skipped_has_contacts"] >= 1
+
+    def test_域名发现闭环_无官网自动采用(self, client):
+        """F8：不预填官网——域名发现→高置信自动确认→联系人自动写入全链路。"""
+        _seed(client)
+        products = client.get("/api/products").json()
+        garment = next(p for p in products if p["code"] == "P-GARMENT")
+        pid = garment["product_id"]
+        potential = client.get(
+            f"/api/products/{pid}/buyers", params={"tier": "potential"}
+        ).json()
+        cid = potential["items"][0]["company_id"]
+
+        enq = client.post(f"/api/companies/{cid}/find-contacts")
+        assert enq.status_code == 202, enq.text
+        self._run_worker(client)
+
+        detail = client.get(f"/api/companies/{cid}").json()
+        company = detail["company"]
+        assert company["website"], "域名发现应自动写入官网"
+        assert company["website_confirmed"] is True, "名称+国家对齐应达高置信自动采用"
+        assert company["website_confidence"] == "high"
+        contacts = client.get(f"/api/companies/{cid}/contacts").json()
+        assert contacts, "高置信自动采用后联系人应自动写入"
+        assert contacts[0]["source"] == "finder"

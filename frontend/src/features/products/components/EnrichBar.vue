@@ -37,10 +37,11 @@ const estimateText = computed(() => {
   const e = estimate.value;
   if (!e) return "";
   const parts = [
-    `可补全 ${e.candidates} 家`,
+    e.capped_by_quota > 0
+      ? `今日可执行 ${e.credits_needed} 家（另有 ${e.capped_by_quota} 家额度不足，明日自动排）`
+      : `可补全 ${e.candidates} 家`,
     e.skipped_has_contacts ? `已有联系人跳过 ${e.skipped_has_contacts}` : "",
     e.skipped_queried_recently ? `近期查过跳过 ${e.skipped_queried_recently}` : "",
-    e.capped_by_quota ? `额度不足截断 ${e.capped_by_quota}` : "",
   ];
   return parts.filter(Boolean).join("，");
 });
@@ -115,7 +116,7 @@ void loadUsageHint();
       >{{ estimateText }}</span>
       <button
         class="small primary"
-        :disabled="busy || estimate.candidates === 0"
+        :disabled="busy || estimate.credits_needed === 0"
         data-testid="enrich-confirm"
         @click="confirmRun"
       >

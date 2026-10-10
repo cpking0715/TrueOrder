@@ -103,6 +103,17 @@ class SqlJobQueue:
             row.locked_at = None
         self._session.commit()
 
+    def defer(self, job_id: int, run_after: datetime) -> None:
+        """延期重跑：回 pending、attempts 不增（不是失败）。"""
+        row = self._session.get(JobORM, job_id)
+        if row is None:
+            return
+        row.status = "pending"
+        row.run_after = run_after
+        row.locked_at = None
+        row.last_error = f"延期至 {run_after:%Y-%m-%d %H:%M}（额度用尽）"
+        self._session.commit()
+
     def fail_permanent(self, job_id: int, error: str) -> None:
         row = self._session.get(JobORM, job_id)
         if row is None:
@@ -142,6 +153,14 @@ class PermanentJobError(Exception):
     """确定性失败（业务规则判定重试无意义）：处理器抛出即永久失败，不退避。"""
 
 
+class QuotaDeferred(Exception):
+    """额度用尽等日滚动资源受限：任务延期到 run_after，不算失败、不进退避。"""
+
+    def __init__(self, run_after: datetime, reason: str = "") -> None:
+        super().__init__(reason or f"额度用尽，延期至 {run_after:%Y-%m-%d %H:%M}")
+        self.run_after = run_after
+
+
 class Worker:
     """单轮/循环执行器：先回收僵死，再认领到期任务并分发给处理器。"""
 
@@ -162,6 +181,9 @@ class Worker:
                 handler(self._queue.session, job.payload)
                 self._queue.complete(job.id)
                 handled += 1
+            except QuotaDeferred as exc:
+                self._queue.session.rollback()
+                self._queue.defer(job.id, exc.run_after)
             except PermanentJobError as exc:
                 self._queue.session.rollback()
                 self._queue.fail_permanent(job.id, str(exc))

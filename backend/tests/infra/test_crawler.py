@@ -107,6 +107,30 @@ class Test抓取与抽取:
         assert "real@example.com" in {c.email for c in result.contacts}
 
 
+class TestDNS钉扎:
+    def test_连接强制走已校验IP而非重新解析(self, make_site):
+        """F6：把不存在的主机名钉到夹具 IP——若连接自行做 DNS 必然失败，能通即证明钉扎生效。"""
+
+        from app.infrastructure.crawler import _PinnedBackend
+
+        base = make_site({"/": "pin@example.com"})
+        port = int(base.rsplit(":", 1)[1])
+        backend = _PinnedBackend({"nonexistent.invalid": "127.0.0.1"})
+        stream = backend.connect_tcp("nonexistent.invalid", port, timeout=5)
+        try:
+            request = b"GET / HTTP/1.1\r\nHost: pin\r\nConnection: close\r\n\r\n"
+            stream.write(request)
+            data = b""
+            while True:
+                chunk = stream.read(4096, timeout=5)
+                if not chunk:
+                    break
+                data += chunk
+            assert b"pin@example.com" in data
+        finally:
+            stream.close()
+
+
 class TestSSRF地址判定:
     def test_私网主机拒绝(self):
         from app.infrastructure.crawler import _host_is_fetchable

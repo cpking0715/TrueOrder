@@ -16,7 +16,7 @@ class FakeContactFinder:
     仅用于本地演示与测试——source_ref 一律带「fake」字样，可辨识可清除。
     """
 
-    def find(self, domain: str, company_name: str) -> FinderResult:
+    def find(self, domain: str, company_name: str, company_country: str = "") -> FinderResult:
         import re
 
         slug = re.sub(r"[^a-z0-9]+", "", (company_name or "company").lower())[:20]
@@ -36,7 +36,8 @@ class FakeContactFinder:
         return FinderResult(
             domain=fake_domain,
             domain_company_name=company_name,
-            domain_country=None,
+            # 回显公司国家：名称对齐时置信度达 high，演示路径与真实路径行为一致
+            domain_country=company_country or None,
             contacts=contacts,
         )
 
@@ -63,7 +64,8 @@ class HunterContactFinder:
         response.raise_for_status()
         return response.json().get("data", {})
 
-    def find(self, domain: str, company_name: str) -> FinderResult:
+    def find(self, domain: str, company_name: str, company_country: str = "") -> FinderResult:
+        # company_country 仅用于 fake 的置信度回显；Hunter 以接口返回为准
         data = self._get("domain-search", {"domain": domain, "company": company_name})
         found_domain = data.get("domain") or domain
         emails = data.get("emails") or []
