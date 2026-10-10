@@ -129,6 +129,11 @@ table.grid tr.clickable:hover { background: #f7f9fd; }
 .filterbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
 .filterbar .grow { flex: 1; min-width: 220px; }
 
+.quickstart .fields { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.quickstart label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; min-width: 180px; }
+.quickstart .grow { flex: 1; min-width: 260px; }
+.quickstart .actions { display: flex; align-items: center; gap: 12px; }
+
 .reason-list { list-style: none; padding: 0; margin: 8px 0; }
 .reason-list li {
   padding: 6px 0;

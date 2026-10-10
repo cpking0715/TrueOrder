@@ -33,6 +33,17 @@ class HsCodeOut(BaseModel):
     note: str = ""
 
 
+class ProductCreateIn(BaseModel):
+    """「填产品找客户」表单：买家词未填时由领域层按受众给默认词。"""
+
+    name: str
+    hs_code: str
+    buyer_type: Literal["importer", "factory", "both"]
+    description: str = ""
+    buyer_keywords: list[str] = []
+    peer_keywords: list[str] = []
+
+
 class ProductOut(BaseModel):
     product_id: int
     code: str

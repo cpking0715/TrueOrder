@@ -6,9 +6,11 @@ import pytest
 
 from app.domain.parse import (
     bill_dedup_hash,
+    build_quick_product,
     default_consignee_country,
     parse_bill_row,
     parse_product_rows,
+    suggest_buyer_keywords,
 )
 
 
@@ -168,3 +170,66 @@ class Test产品目录解析:
 def test_默认收货人国家为US():
     assert default_consignee_country("") == "US"
     assert default_consignee_country("VIET NAM") == "VN"
+
+
+class Test快速建产品:
+    """「我填我的产品，帮我找客户」表单提交 → ProductConfig。"""
+
+    def test_importer产品单税号单受众且带默认买家词(self):
+        product, error = build_quick_product(
+            code="QUICK-0001", name="女士棉质长裤", hs_code="620462", buyer_type="importer"
+        )
+        assert error is None
+        assert product is not None
+        assert product.buyer_type == "importer"
+        assert [(h.hs_code, h.audience) for h in product.hs_assignments] == [("620462", "importer")]
+        assert product.buyer_keywords  # 未填买家词时给受众默认词，业务匹配不缺席
+        assert product.peer_keywords == ()
+
+    def test_both产品同税号拆两类受众(self):
+        product, _ = build_quick_product(
+            code="QUICK-0002", name="面料", hs_code="600632", buyer_type="both"
+        )
+        assert product is not None
+        assert sorted(h.audience for h in product.hs_assignments) == ["factory", "importer"]
+
+    def test_显式关键词覆盖默认且归一化去重(self):
+        product, _ = build_quick_product(
+            code="QUICK-0003",
+            name="成衣",
+            hs_code="620462",
+            buyer_type="importer",
+            buyer_keywords=["apparel", "APPAREL", " wholesale "],
+            peer_keywords=["garment factory"],
+        )
+        assert product is not None
+        assert product.buyer_keywords == ("APPAREL", "WHOLESALE")
+        assert product.peer_keywords == ("GARMENT FACTORY",)
+
+    def test_默认买家词按受众区分且both取并集(self):
+        importer_kw = suggest_buyer_keywords("importer")
+        factory_kw = suggest_buyer_keywords("factory")
+        assert importer_kw and factory_kw
+        assert not set(importer_kw) & set(factory_kw)
+        assert set(suggest_buyer_keywords("both")) == set(importer_kw) | set(factory_kw)
+
+    def test_名称缺失报错(self):
+        product, error = build_quick_product(
+            code="QUICK-0004", name="  ", hs_code="620462", buyer_type="importer"
+        )
+        assert product is None
+        assert error and "名称" in error
+
+    def test_税号非法报错(self):
+        product, error = build_quick_product(
+            code="QUICK-0005", name="成衣", hs_code="62x462", buyer_type="importer"
+        )
+        assert product is None
+        assert error and "税号" in error
+
+    def test_非法buyer_type报错(self):
+        product, error = build_quick_product(
+            code="QUICK-0006", name="成衣", hs_code="620462", buyer_type="retailer"
+        )
+        assert product is None
+        assert error and "buyer_type" in error

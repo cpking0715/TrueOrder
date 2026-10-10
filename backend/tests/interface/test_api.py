@@ -163,6 +163,107 @@ class Test买家列表与导出:
         assert len(r_all.text.strip().splitlines()) > len(r_min.text.strip().splitlines())
 
 
+class Test快速建产品:
+    """「我填我的产品，帮我找客户」：先有提单数据，填产品立即出客户名单。"""
+
+    def seed_bills_only(self, client) -> None:
+        bills_csv = (SEED_DIR / "sample_bills.csv").read_text(encoding="utf-8-sig")
+        r = client.post(
+            "/api/bills/import",
+            files={"file": ("sample_bills.csv", bills_csv, "text/csv")},
+            data={"as_of": AS_OF},
+        )
+        assert r.status_code == 200, r.text
+
+    def test_填产品立即出客户计数(self, client):
+        self.seed_bills_only(client)
+        r = client.post(
+            "/api/products",
+            json={
+                "name": "女士棉质长裤",
+                "hs_code": "620462",
+                "buyer_type": "importer",
+                "buyer_keywords": ["APPAREL", "CLOTHING"],
+            },
+        )
+        assert r.status_code == 201, r.text
+        body = r.json()
+        assert body["code"].startswith("QUICK-")
+        assert body["hs_codes"] == [{"hs_code": "620462", "audience": "importer", "note": ""}]
+        assert body["counts"]["precise"] == 1  # BROOKLYN APPAREL（行业词命中业务匹配）
+        assert body["counts"]["potential"] == 2
+
+    def test_未填行业词时默认词只保潜在层(self, client):
+        self.seed_bills_only(client)
+        body = client.post(
+            "/api/products",
+            json={"name": "女士棉质长裤", "hs_code": "620462", "buyer_type": "importer"},
+        ).json()
+        assert body["counts"].get("precise", 0) == 0  # 默认词不含 APPAREL，精准层缺席
+        assert body["counts"]["potential"] == 3
+
+    def test_快速产品出现在列表且可查买家(self, client):
+        self.seed_bills_only(client)
+        product_id = client.post(
+            "/api/products",
+            json={
+                "name": "瓦楞纸板",
+                "hs_code": "480810",
+                "buyer_type": "factory",
+                "buyer_keywords": ["PACKAGING", "CARTON"],
+            },
+        ).json()["product_id"]
+        names = [
+            p["name"]
+            for p in client.get(f"/api/products/{product_id}/buyers", params={"tier": "precise"}).json()["items"]
+        ]
+        assert "GREAT LAKES PACKAGING CORP" in names
+
+    def test_重复提交生成不冲突编码(self, client):
+        self.seed_bills_only(client)
+        first = client.post(
+            "/api/products", json={"name": "A", "hs_code": "620462", "buyer_type": "importer"}
+        ).json()["code"]
+        second = client.post(
+            "/api/products", json={"name": "B", "hs_code": "620462", "buyer_type": "importer"}
+        ).json()["code"]
+        assert first != second
+
+    def test_名称缺失返回422(self, client):
+        r = client.post(
+            "/api/products", json={"name": "  ", "hs_code": "620462", "buyer_type": "importer"}
+        )
+        assert r.status_code == 422
+        assert "名称" in r.json()["detail"]
+
+    def test_税号非法返回422(self, client):
+        r = client.post(
+            "/api/products", json={"name": "成衣", "hs_code": "62x462", "buyer_type": "importer"}
+        )
+        assert r.status_code == 422
+
+    def test_买家词默认兜底可被覆盖(self, client):
+        self.seed_bills_only(client)
+        # 未填买家词：默认词命中 TRADING/WHOLESALE 类公司 → ACME TRADING 保持潜在层 BUSINESS_MATCH
+        r = client.post(
+            "/api/products",
+            json={"name": "板", "hs_code": "480810", "buyer_type": "factory",
+                  "buyer_keywords": ["PACKAGING"]},
+        )
+        assert r.status_code == 201
+        product_id = r.json()["product_id"]
+        buyers = client.get(
+            f"/api/products/{product_id}/buyers", params={"tier": "potential"}
+        ).json()["items"]
+        assert any("UNION PACKAGING" in b["name"] for b in buyers)
+        assert any(
+            "PACKAGING" in reason["text"]
+            for b in buyers
+            for reason in b["reasons"]
+            if reason["code"] == "BUSINESS_MATCH"
+        )
+
+
 class Test公司抽屉:
     def test_抽屉返回提单与得分(self, client):
         seed_via_api(client)

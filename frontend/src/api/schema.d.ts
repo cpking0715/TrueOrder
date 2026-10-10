@@ -48,7 +48,11 @@ export interface paths {
         /** List Products */
         get: operations["list_products_api_products_get"];
         put?: never;
-        post?: never;
+        /**
+         * Create Product
+         * @description 「填产品找客户」：建产品并立即在已导入提单库上打分，返回带计数的完整产品。
+         */
+        post: operations["create_product_api_products_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -362,6 +366,36 @@ export interface components {
             /** Sample Notice */
             sample_notice: string;
         };
+        /**
+         * ProductCreateIn
+         * @description 「填产品找客户」表单：买家词未填时由领域层按受众给默认词。
+         */
+        ProductCreateIn: {
+            /** Name */
+            name: string;
+            /** Hs Code */
+            hs_code: string;
+            /**
+             * Buyer Type
+             * @enum {string}
+             */
+            buyer_type: "importer" | "factory" | "both";
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * Buyer Keywords
+             * @default []
+             */
+            buyer_keywords: string[];
+            /**
+             * Peer Keywords
+             * @default []
+             */
+            peer_keywords: string[];
+        };
         /** ProductOut */
         ProductOut: {
             /** Product Id */
@@ -477,6 +511,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProductOut"][];
+                };
+            };
+        };
+    };
+    create_product_api_products_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

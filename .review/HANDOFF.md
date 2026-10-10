@@ -13,6 +13,7 @@
 | ingest：提单 CSV 导入器 + 公开样本 + 页面标明非全量 | `POST /api/bills/import`（企业归并 + 去重哈希 + 自动重打分）；`backend/app/seed/sample_bills.csv`（26 票，公司名虚构、字段结构对齐美国提单公开样本，场景对照表见 `sample_bills.README.md`）；`/api/meta` 返回非全量声明，前端每页顶部展示黄色横幅。 |
 | score：按买家类型打分 + 排除 | `backend/app/domain/scoring.py` 纯函数：潜在 = 该税号近 24 个月、原产 CN/VN、≥1 票；精准 = 其中近 12 个月重复进口 + 供货方与税号对应 + 业务词匹配；排除 EX_BLANK_CONSIGNEE / EX_BANK / EX_FORWARDER / EX_RELATED_PARTY / EX_PEER_OVERSEAS / EX_HS_INVALID；每条 `ScoreReason` 携带 `bill_ids`，界面点回提单。 |
 | ui：产品入口 + 潜在/精准页签 + 抽屉 + 导出 | 前端（Vue3+Vite+TS）：`#/` 产品列表（含导入面板）→ `#/products/:id` 详情页（潜在/精准/已排除三页签 + 受众切换 + FTS 搜索 + 国家/票数/排序筛选 + 导出当前筛选 CSV）；公司抽屉展示票数、最近到港、供货方、得分理由（提单号 chip）与票据明细。 |
+| 快速建产品（用户反馈追加）：填产品找客户 | 主交互改为「我填产品 → 系统找客户」：`POST /api/products`（`ProductCreateIn`：名称/税号/受众，买家词选填）→ `domain/parse.build_quick_product`（校验 + 未填买家词时按受众给默认词，both 拆两类受众税号）→ `repo.next_quick_code()` 生成 QUICK-000n 编码 → upsert 后立即重打分 → 返回带计数的产品；前端首页（`ProductsView.vue` + `QuickStartForm.vue`）表单提交后直接跳到该产品的客户结果页。CSV 导入保留为批量/高级入口。数据源不变：仍只匹配已导入的授权提单库，不接任何外部查询源。 |
 
 计划中的显式要求逐条核对：
 
@@ -91,6 +92,15 @@ uv run uvicorn app.interface.main:app --port 8000
 
 1. 同组件路由切换（产品1→产品2）不刷新受众与列表，纸板页残留成衣数据。复现测试：`路由在产品间切换时受众与列表跟随新产品`。修复：watch(productId) 重置受众并重载。
 2. 逐字符搜索的响应竞态：过期响应覆盖新结果（搜索 carton 显示 0 家）。复现测试：`搜索的过期响应不覆盖新响应`。修复：请求序号守卫，过期响应丢弃。
+
+追加轮（快速建产品，2026-10-10）测试输出：
+
+| 命令 | 结果 |
+| --- | --- |
+| `cd backend && uv run pytest -q` | **135 passed**, 1 warning in 7.69s（新增：领域 7 条 build_quick_product/suggest_buyer_keywords、接口 7 条 POST /api/products） |
+| `cd frontend && pnpm test` | **23 passed**（新增 QuickStartForm 5 条：必填校验、税号校验、提交 payload、默认词留空、API 错误态） |
+| `cd frontend && pnpm lint` + `vue-tsc --noEmit` | 0 错误（QuickStartForm 超 150 行，样式挪入 main.css 后达标） |
+| Playwright 冒烟（Chrome 无头，`smoke_quickstart.py`） | 首页表单可见 → 填「儿童棉质运动套装/620462/APPAREL;CLOTHING」提交 → 落到 `#/products/5`，页签 `潜在客户（2）| 精准客户（1）| 已排除（6）` ✔ |
 
 ## 已知假设与未验证项
 

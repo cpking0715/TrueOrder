@@ -9,11 +9,18 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 
+from app.domain.parse import build_quick_product
 from app.infrastructure.importers import CsvImporter
 from app.infrastructure.queries import BuyerQueryFilters, SqlBuyerQueries
-from app.interface.deps import get_buyer_queries, get_importer
+from app.infrastructure.repositories import SqlProductRepository
+from app.interface.deps import get_buyer_queries, get_importer, get_product_repository
 from app.interface.mapping import buyer_to_out
-from app.interface.schemas import BuyerListOut, ImportSummaryOut, ProductOut
+from app.interface.schemas import (
+    BuyerListOut,
+    ImportSummaryOut,
+    ProductCreateIn,
+    ProductOut,
+)
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
@@ -43,6 +50,44 @@ def list_products(queries: SqlBuyerQueries = Depends(get_buyer_queries)):
         )
         for p in queries.list_products_with_counts()
     ]
+
+
+@router.post("", response_model=ProductOut, status_code=201)
+def create_product(
+    payload: ProductCreateIn,
+    repo: SqlProductRepository = Depends(get_product_repository),
+    queries: SqlBuyerQueries = Depends(get_buyer_queries),
+    importer: CsvImporter = Depends(get_importer),
+):
+    """「填产品找客户」：建产品并立即在已导入提单库上打分，返回带计数的完整产品。"""
+    product, error = build_quick_product(
+        code=repo.next_quick_code(),
+        name=payload.name,
+        hs_code=payload.hs_code,
+        buyer_type=payload.buyer_type,
+        description=payload.description,
+        buyer_keywords=payload.buyer_keywords,
+        peer_keywords=payload.peer_keywords,
+    )
+    if error or product is None:
+        raise HTTPException(status_code=422, detail=error or "产品创建失败")
+    product_id = repo.upsert_product(product)
+    importer.rescore(date.today())
+    row = next(
+        (p for p in queries.list_products_with_counts() if p["product_id"] == product_id), None
+    )
+    if row is None:
+        raise HTTPException(status_code=500, detail="产品已创建但查询计数失败")
+    return ProductOut(
+        product_id=row["product_id"],
+        code=row["code"],
+        name=row["name"],
+        description=row["description"],
+        buyer_type=row["buyer_type"],
+        hs_codes=row["hs_codes"],  # type: ignore[arg-type]
+        counts=row["counts"],
+        counts_by_audience=row.get("counts_by_audience", {}),
+    )
 
 
 @router.get("/{product_id}/buyers", response_model=BuyerListOut)

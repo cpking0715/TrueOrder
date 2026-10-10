@@ -5,6 +5,7 @@ import type { components } from "./schema";
 
 export type Meta = components["schemas"]["MetaOut"];
 export type Product = components["schemas"]["ProductOut"];
+export type ProductCreate = components["schemas"]["ProductCreateIn"];
 export type Buyer = components["schemas"]["BuyerOut"];
 export type BuyerList = components["schemas"]["BuyerListOut"];
 export type CompanyDetail = components["schemas"]["CompanyDetailOut"];
@@ -29,6 +30,15 @@ export async function fetchMeta(): Promise<Meta> {
 
 export async function fetchProducts(): Promise<Product[]> {
   return requestJson<Product[]>("/api/products");
+}
+
+// 「填产品找客户」：建产品即在已导入提单库上打分，返回带计数的产品
+export async function createProduct(payload: ProductCreate): Promise<Product> {
+  return requestJson<Product>("/api/products", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 }
 
 export function buildBuyersParams(query: BuyerQuery): Record<string, string> {

@@ -12,6 +12,7 @@ from app.core.config import get_settings
 from app.infrastructure.db import make_engine, make_session_factory
 from app.infrastructure.importers import CsvImporter
 from app.infrastructure.queries import SqlBuyerQueries
+from app.infrastructure.repositories import SqlProductRepository
 
 
 @lru_cache
@@ -34,3 +35,7 @@ def get_buyer_queries(session: Session = Depends(get_session)) -> SqlBuyerQuerie
 
 def get_importer(session: Session = Depends(get_session)) -> CsvImporter:
     return CsvImporter(session)
+
+
+def get_product_repository(session: Session = Depends(get_session)) -> SqlProductRepository:
+    return SqlProductRepository(session)

@@ -6,10 +6,11 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Sequence
 from datetime import datetime
 
 from app.domain.entities import Audience, BillLine, BuyerType, HsAssignment, ProductConfig
-from app.domain.normalize import normalize_company_name, normalize_country
+from app.domain.normalize import is_valid_hs, normalize_company_name, normalize_country
 
 BILL_DATE_FORMATS = ("%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y")
 
@@ -165,6 +166,62 @@ def _merge_keywords(target: list[str], cell: str) -> None:
     for keyword in _split_keywords(cell):
         if keyword not in target:
             target.append(keyword)
+
+
+# 快速建产品未填买家词时的受众默认词（子串匹配用，前缀式写法可覆盖多后缀）
+_DEFAULT_BUYER_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "importer": ("IMPORT", "TRADING", "WHOLESALE", "DISTRIBUT"),
+    "factory": ("MANUFACTUR", "MILL", "FACTORY", "INDUSTRIES"),
+}
+
+
+def suggest_buyer_keywords(buyer_type: BuyerType) -> tuple[str, ...]:
+    """按受众给默认买家行业词；both 取两类并集。"""
+    if buyer_type == "both":
+        merged = (*_DEFAULT_BUYER_KEYWORDS["importer"], *_DEFAULT_BUYER_KEYWORDS["factory"])
+        return tuple(dict.fromkeys(merged))
+    return _DEFAULT_BUYER_KEYWORDS.get(buyer_type, ())
+
+
+def build_quick_product(
+    *,
+    code: str,
+    name: str,
+    hs_code: str,
+    buyer_type: str,
+    description: str = "",
+    buyer_keywords: Sequence[str] = (),
+    peer_keywords: Sequence[str] = (),
+) -> tuple[ProductConfig | None, str | None]:
+    """「填产品找客户」表单 → ProductConfig。校验失败返回 (None, 错误描述)。
+
+    买家词未填时用受众默认词兜底（业务匹配不缺席）；同行词无默认（需懂行的人配）。
+    """
+    name = name.strip()
+    if not name:
+        return None, "产品名称必填"
+    hs = (hs_code or "").strip()
+    if not is_valid_hs(hs):
+        return None, f"税号非法：{hs!r}（需 6-10 位数字，不能全零）"
+    if buyer_type not in _BUYER_TYPES:
+        return None, f"buyer_type 必须是 importer/factory/both，得到 {buyer_type!r}"
+
+    audiences: tuple[Audience, ...] = (
+        ("importer", "factory") if buyer_type == "both" else (buyer_type,)  # type: ignore[arg-type]
+    )
+    user_buyer = tuple(dict.fromkeys(kw.strip().upper() for kw in buyer_keywords if kw.strip()))
+    user_peer = tuple(dict.fromkeys(kw.strip().upper() for kw in peer_keywords if kw.strip()))
+    config = ProductConfig(
+        product_id=0,
+        code=code,
+        name=name,
+        buyer_type=buyer_type,  # type: ignore[arg-type]
+        hs_assignments=tuple(HsAssignment(hs_code=hs, audience=a) for a in audiences),
+        buyer_keywords=user_buyer or suggest_buyer_keywords(buyer_type),  # type: ignore[arg-type]
+        peer_keywords=user_peer,
+        description=(description or "").strip(),
+    )
+    return config, None
 
 
 def default_consignee_country(raw: str) -> str:

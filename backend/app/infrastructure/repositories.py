@@ -75,6 +75,18 @@ class SqlProductRepository:
         ).all()
         return _to_product_config(product, hs_rows)
 
+    def next_quick_code(self) -> str:
+        """快速建产品的编码：QUICK-0001 递增，不与既有 code 冲突。"""
+        codes = self._session.scalars(
+            select(ProductORM.code).where(ProductORM.code.like("QUICK-%"))
+        )
+        max_n = 0
+        for code in codes:
+            suffix = code.removeprefix("QUICK-")
+            if suffix.isdigit():
+                max_n = max(max_n, int(suffix))
+        return f"QUICK-{max_n + 1:04d}"
+
     def upsert_product(self, product: ProductConfig) -> int:
         """按 code 更新产品并整体替换税号对应关系（幂等）。"""
         existing = self._session.scalar(select(ProductORM).where(ProductORM.code == product.code))
