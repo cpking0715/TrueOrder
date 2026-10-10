@@ -131,3 +131,24 @@ class ImportSummary:
     companies_updated: int = 0
     products_upserted: int = 0
     hs_assignments_written: int = 0
+
+
+@dataclass(frozen=True)
+class FoundContact:
+    """补全服务/官网抓取返回的一位联系人（写入 contacts 前的中转结构）。"""
+
+    name: str | None = None
+    title: str = ""
+    email: str = ""
+    phone: str | None = None
+    source_ref: str = ""
+
+
+@dataclass(frozen=True)
+class FinderResult:
+    """ContactFinder 一次查询的结果：域名候选 + 域名上的联系人。"""
+
+    domain: str | None = None
+    domain_company_name: str | None = None
+    domain_country: str | None = None
+    contacts: tuple[FoundContact, ...] = ()

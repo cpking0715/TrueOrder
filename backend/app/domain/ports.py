@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from datetime import date
 from typing import Protocol
 
-from app.domain.entities import CompanyFacts, ProductConfig, ScoreResult
+from app.domain.entities import CompanyFacts, FinderResult, ProductConfig, ScoreResult
 
 
 class ProductReader(Protocol):
@@ -38,3 +38,12 @@ class BillImportSink(Protocol):
 
 class CompanyImportSink(Protocol):
     def upsert_company(self, raw_name: str, address: str, country: str) -> int: ...
+
+
+class ContactFinder(Protocol):
+    """按次联系人补全端口（hunter/fake 适配器可整体替换）。"""
+
+    def find(self, domain: str, company_name: str) -> FinderResult: ...
+
+    def verify(self, email: str) -> str:
+        """返回 valid | invalid | unknown（不可判定时 unknown）。"""

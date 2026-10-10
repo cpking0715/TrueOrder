@@ -38,30 +38,38 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 // 关闭后/切换公司在途的旧响应不允许写入（与买家列表的 requestSeq 同口径）
 let requestSeq = 0;
 
+async function load(id: number) {
+  const seq = ++requestSeq;
+  loading.value = true;
+  error.value = "";
+  try {
+    const data = await fetchCompany(id, props.productId, props.audience);
+    if (seq !== requestSeq) return;
+    detail.value = data;
+  } catch (e) {
+    if (seq !== requestSeq) return;
+    error.value = (e as Error).message;
+  } finally {
+    if (seq === requestSeq) {
+      loading.value = false;
+    }
+  }
+}
+
+function reload() {
+  if (props.companyId != null) void load(props.companyId);
+}
+
 watch(
   () => [props.companyId, props.productId, props.audience] as const,
-  async ([id]) => {
-    const seq = ++requestSeq;
+  ([id]) => {
     window.removeEventListener("keydown", onKeydown);
     if (id == null) {
       detail.value = null;
       return;
     }
     window.addEventListener("keydown", onKeydown);
-    loading.value = true;
-    error.value = "";
-    try {
-      const data = await fetchCompany(id, props.productId, props.audience);
-      if (seq !== requestSeq) return;
-      detail.value = data;
-    } catch (e) {
-      if (seq !== requestSeq) return;
-      error.value = (e as Error).message;
-    } finally {
-      if (seq === requestSeq) {
-        loading.value = false;
-      }
-    }
+    void load(id);
   },
   { immediate: true },
 );
@@ -123,6 +131,8 @@ async function locateBill(billId: number) {
           :company-id="detail.company.company_id"
           :website="detail.company.website"
           :confirmed="detail.company.website_confirmed"
+          :confidence="detail.company.website_confidence"
+          @confirmed="reload"
         />
         <ContactsPanel :company-id="detail.company.company_id" />
 

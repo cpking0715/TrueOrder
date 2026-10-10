@@ -273,6 +273,83 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/companies/{company_id}/find-contacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Find Contacts
+         * @description 对单个选定企业触发补全：finder=按域名/公司名查联系人，website=抓官网公开页。
+         */
+        post: operations["find_contacts_api_companies__company_id__find_contacts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/companies/{company_id}/website/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Website
+         * @description 把中低置信的域名候选确认为官网（确认后才允许继续查联系人/抓取）。
+         */
+        post: operations["confirm_website_api_companies__company_id__website_confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enrichment/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Enrichment Usage */
+        get: operations["enrichment_usage_api_enrichment_usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/products/{product_id}/buyers/enrich": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enrich Buyers
+         * @description 批量补全当前筛选的前 N 家：不带 confirm 只返回额度估计；confirm=true 才入队。
+         */
+        post: operations["enrich_buyers_api_products__product_id__buyers_enrich_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -403,6 +480,16 @@ export interface components {
              * @default false
              */
             website_confirmed: boolean;
+            /**
+             * Website Source
+             * @default
+             */
+            website_source: string;
+            /**
+             * Website Confidence
+             * @default
+             */
+            website_confidence: string;
         };
         /** CompanyPatchIn */
         CompanyPatchIn: {
@@ -441,6 +528,16 @@ export interface components {
             website: string | null;
             /** Website Confirmed */
             website_confirmed: boolean;
+            /**
+             * Website Source
+             * @default
+             */
+            website_source: string;
+            /**
+             * Website Confidence
+             * @default
+             */
+            website_confidence: string;
         };
         /** ContactCreateIn */
         ContactCreateIn: {
@@ -510,6 +607,88 @@ export interface components {
             /** Invalid Rows */
             invalid_rows: string[];
         };
+        /** EnrichConfirmIn */
+        EnrichConfirmIn: {
+            /** Tier */
+            tier?: string | null;
+            /** Q */
+            q?: string | null;
+            /** Country */
+            country?: string | null;
+            /** Min Shipments */
+            min_shipments?: number | null;
+            /**
+             * Limit
+             * @default 10
+             */
+            limit: number;
+            /**
+             * Confirm
+             * @default false
+             */
+            confirm: boolean;
+        };
+        /** EnrichExecutedOut */
+        EnrichExecutedOut: {
+            /**
+             * Candidates
+             * @default 0
+             */
+            candidates: number;
+            /**
+             * Skipped Has Contacts
+             * @default 0
+             */
+            skipped_has_contacts: number;
+            /**
+             * Skipped Queried Recently
+             * @default 0
+             */
+            skipped_queried_recently: number;
+            /**
+             * Capped By Quota
+             * @default 0
+             */
+            capped_by_quota: number;
+            /**
+             * Credits Needed
+             * @default 0
+             */
+            credits_needed: number;
+            /**
+             * Daily Cap
+             * @default 0
+             */
+            daily_cap: number;
+            /**
+             * Used Today
+             * @default 0
+             */
+            used_today: number;
+            /**
+             * Enqueued
+             * @default 0
+             */
+            enqueued: number;
+            /**
+             * Job Ids
+             * @default []
+             */
+            job_ids: number[];
+        };
+        /** EnrichUsageOut */
+        EnrichUsageOut: {
+            /** Provider */
+            provider: string;
+            /** Configured */
+            configured: boolean;
+            /** Daily Cap */
+            daily_cap: number;
+            /** Used Today */
+            used_today: number;
+            /** Remaining */
+            remaining: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -576,6 +755,13 @@ export interface components {
             rescore: {
                 [key: string]: unknown;
             }[];
+        };
+        /** JobCreatedOut */
+        JobCreatedOut: {
+            /** Job Id */
+            job_id: number;
+            /** Kind */
+            kind: string;
         };
         /**
          * JobOut
@@ -1263,6 +1449,125 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobsListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    find_contacts_api_companies__company_id__find_contacts_post: {
+        parameters: {
+            query?: {
+                method?: string;
+            };
+            header?: never;
+            path: {
+                company_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobCreatedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_website_api_companies__company_id__website_confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyWebsiteOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    enrichment_usage_api_enrichment_usage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnrichUsageOut"];
+                };
+            };
+        };
+    };
+    enrich_buyers_api_products__product_id__buyers_enrich_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnrichConfirmIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnrichExecutedOut"];
                 };
             };
             /** @description Validation Error */

@@ -138,6 +138,10 @@ class SqlJobQueue:
         return [_to_job(r) for r in self._session.scalars(stmt)]
 
 
+class PermanentJobError(Exception):
+    """确定性失败（业务规则判定重试无意义）：处理器抛出即永久失败，不退避。"""
+
+
 class Worker:
     """单轮/循环执行器：先回收僵死，再认领到期任务并分发给处理器。"""
 
@@ -158,6 +162,9 @@ class Worker:
                 handler(self._queue.session, job.payload)
                 self._queue.complete(job.id)
                 handled += 1
+            except PermanentJobError as exc:
+                self._queue.session.rollback()
+                self._queue.fail_permanent(job.id, str(exc))
             except Exception as exc:  # noqa: BLE001 - 队列必须吞掉一切处理器异常
                 self._queue.session.rollback()
                 self._queue.fail(job.id, f"{type(exc).__name__}: {exc}", now)

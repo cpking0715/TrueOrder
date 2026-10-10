@@ -85,6 +85,8 @@ const companyFixture: CompanyDetail = {
     address: "350 FIFTH AVE",
     website: null,
     website_confirmed: false,
+    website_source: "",
+    website_confidence: "",
     same_name_conflict: false,
   },
   scores: [

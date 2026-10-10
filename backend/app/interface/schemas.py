@@ -121,6 +121,8 @@ class CompanyOut(BaseModel):
     same_name_conflict: bool
     website: str | None = None
     website_confirmed: bool = False
+    website_source: str = ""
+    website_confidence: str = ""
 
 
 class CompanyDetailOut(BaseModel):
@@ -169,6 +171,8 @@ class CompanyWebsiteOut(BaseModel):
     company_id: int
     website: str | None
     website_confirmed: bool
+    website_source: str = ""
+    website_confidence: str = ""
 
 
 class ContactsImportOut(BaseModel):

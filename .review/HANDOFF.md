@@ -398,3 +398,23 @@ verdict：**F1-F4 全部 verified**（复审通过读 fastapi 0.143 源码确认
 门禁：后端 **221 passed** + ruff 干净；前端 **38 passed** + eslint 0 错 + vue-tsc 通过 + 构建成功。冒烟（Playwright + 真实 worker 进程）：入队→worker --once 消费→状态页渲染类型/失败原因→过滤交互，截图 `screenshots/08-jobs-page.png`。
 
 设计取舍：worker 处理器注册表本期为空（WP4 挂 find_contacts/crawl_website），空表下队列语义已全部锁定；队列每方法自带 commit，处理器异常走 rollback+退避，与既有「响应前显式 commit」惯例一致。
+
+## WP4 补全与抓取（ZCode 主会话 2026-10-10，add2a70 之后）
+
+按 DEV-SPEC 第一期顺序（WP0✅→WP1✅→WP3✅→**WP4**）交付。规格 3.6/3.7 全约束落地：
+
+| 层 | 交付 | 测试 |
+| --- | --- | --- |
+| 领域 | `contacts.py` 增：website_confidence（名称+国家→high/medium/low）、pick_best_recipient（具名valid>具名unknown>通用；职位词优先）、extract_emails/phones、select_crawl_pages（首页+contact/about/team 同站≤5页） | 14 条（test_contacts_rules.py） |
+| 基础设施 | `contact_finders/`（hunter 域名搜索+邮箱验证 / fake 无Key演示源，make_finder 切换）；`crawler.py`（robots.txt、同主机≥2s、1MB 上限、SSRF 解析 IP 拒回环/私网/链路本地+重定向复检、allow_loopback 仅测试）；`enrichment.py`（SqlEnrichmentLog 日上限/30天不重查；find_contacts 处理器：**域名发现**（无官网也按公司名查，高置信自动采用+查联系人，中低只写候选等确认）；crawl_website 处理器；verify_email 处理器（无Key跳过）；robots/超限/无公司→永久失败不退避） | 处理器 11 条 + 抓取器 8 条（本地 HTTP 夹具：robots拒、私网重定向拒、超大页弃、同站重定向跟随、SSRF 判定） |
+| ORM/迁移 | `enrichment_calls` 表 + `companies.website_source/website_confidence`（迁移 209d5470bed4，server_default=''），旧库模拟测试同步剥 WP4 对象 | compare_metadata 一致性绿 |
+| 接口 | POST /companies/{id}/find-contacts?method=finder\|website（202 入队）；POST /products/{id}/buyers/enrich（不带 confirm 只估计：可补全/跳过已有联系人/近期查过/额度截断；confirm=true 入队且受剩余额度截断）；POST /companies/{id}/website/confirm；GET /api/enrichment/usage | 9 条（test_enrich_api.py） |
+| worker | build_registry 注册三类处理器；PermanentJobError 永久失败语义进 Worker（与退避重试区分） | WP3 测试语义保持 |
+| 前端 | 抽屉：查找联系方式/抓取官网按钮+入队提示；官网置信度徽章（中低置信黄标）+「确认是官网」按钮（确认后重载）；买家工具栏 EnrichBar 两段式（估计→确认执行，额度提示含 fake/hunter 状态） | 5 条组件测试（EnrichBar 两段式/0家禁用/错误态 + 面板两种方法入队） |
+
+门禁：后端 **265 passed**（+44）+ ruff 干净；前端 **43 passed** + eslint/vue-tsc/build 全绿。
+冒烟（两段，真实链路）：API 入队 → 真实 worker 进程（三处理器注册）→ fake finder 联系人入库（source=finder，source_ref 标注演示数据）→ 浏览器抽屉呈现联系人+已确认官网徽章，截图 `screenshots/09-wp4-enrich.png`。
+
+设计取舍与规格偏离（1 处，已在代码注释与本表记录）：
+- 3.6 写「没有 website 不调用接口」，但 1.4.1 交付标准与 3.7 第 1 条要求「系统自动补全域名」——两者矛盾。实现取后者：无官网时仍按公司名调 finder 做**域名发现**（Hunter domain-search 支持传公司名；fake 同样支持），高置信自动采用后继续查联系人，中低置信只写候选等人工确认。额度与审计（enrichment_calls）两条路径都生效。
+- `docs/finder-eval.md` 已建占位：真实 Hunter 命中率评估需要用户提供 API Key 后手工执行（10 家样本），当前无 Key 走 fake 演示源、来源可辨识不污染真实数据。

@@ -18,6 +18,7 @@ import BuyerTabs from "../components/BuyerTabs.vue";
 import FilterBar from "../components/FilterBar.vue";
 import BuyerTable from "../components/BuyerTable.vue";
 import CompanyDrawer from "../components/CompanyDrawer.vue";
+import EnrichBar from "../components/EnrichBar.vue";
 
 const route = useRoute();
 const productId = computed(() => Number(route.params.id));
@@ -190,6 +191,15 @@ watch(
     >
       已显示前 {{ result.items.length }} 家（共 {{ result.total }} 家），导出 CSV 含全部筛选结果。
     </p>
+    <EnrichBar
+      :product-id="productId"
+      :query="{
+        tier: filters.state.value.tier,
+        q: filters.state.value.q,
+        country: filters.state.value.country,
+        minShipments: filters.state.value.minShipments,
+      }"
+    />
     <p style="margin-top: 12px">
       <a
         class="btn primary"

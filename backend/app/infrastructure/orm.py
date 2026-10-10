@@ -89,9 +89,11 @@ class CompanyORM(Base):
         TSVECTOR(),
         Computed("to_tsvector('simple', coalesce(search_text, ''))", persisted=True),
     )
-    # 官网（WP1）：来源与置信度两列随 WP4 补全功能一起迁移
+    # 官网（WP1 字段 + WP4 来源/置信度）
     website: Mapped[str | None] = mapped_column(Text, nullable=True)
     website_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    website_source: Mapped[str] = mapped_column(String(16), default="")  # manual/finder/website
+    website_confidence: Mapped[str] = mapped_column(String(8), default="")  # high/medium/low
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -236,3 +238,20 @@ class JobORM(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class EnrichmentCallORM(Base):
+    """按次补全调用日志（WP4）：每日上限计量与审计，来源可追溯。"""
+
+    __tablename__ = "enrichment_calls"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    provider: Mapped[str] = mapped_column(String(32))
+    company_id: Mapped[int] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), index=True
+    )
+    credits_used: Mapped[int] = mapped_column(Integer, default=1)
+    called_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    ok: Mapped[bool] = mapped_column(Boolean, default=True)

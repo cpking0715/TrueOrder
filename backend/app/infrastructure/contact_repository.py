@@ -318,3 +318,14 @@ class SqlContactRepository:
                 )
             )
         return result
+
+    def companies_with_contacts(self, company_ids: list[int]) -> set[int]:
+        """已有任何联系人的公司（批量补全时跳过）。"""
+        if not company_ids:
+            return set()
+        rows = self._session.scalars(
+            select(ContactORM.company_id)
+            .where(ContactORM.company_id.in_(company_ids))
+            .distinct()
+        )
+        return set(rows)

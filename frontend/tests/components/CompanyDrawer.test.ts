@@ -22,6 +22,8 @@ function companyFixture(id: number, name: string): CompanyDetail {
       address: "",
       website: null,
       website_confirmed: false,
+      website_source: "",
+      website_confidence: "",
       same_name_conflict: false,
     },
     scores: [],

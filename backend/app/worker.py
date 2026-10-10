@@ -20,8 +20,10 @@ from app.infrastructure.jobs import Handler, SqlJobQueue, Worker
 
 
 def build_handlers() -> dict[str, Handler]:
-    """WP4 在此注册 find_contacts / crawl_website 处理器；第二期再挂 send_email。"""
-    return {}
+    """WP4 处理器注册表；第二期再挂 send_email / poll_imap。"""
+    from app.infrastructure.enrichment import build_registry
+
+    return build_registry()
 
 
 def run_loop(

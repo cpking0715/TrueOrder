@@ -1,12 +1,23 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
-import { patchCompanyWebsite } from "@/api/contacts";
+import { computed, ref, watch } from "vue";
+import { confirmWebsite, patchCompanyWebsite } from "@/api/contacts";
 
 const props = defineProps<{
   companyId: number;
   website?: string | null;
   confirmed?: boolean;
+  confidence?: string | null;
 }>();
+
+const CONFIDENCE_LABEL: Record<string, string> = {
+  high: "高置信",
+  medium: "中置信候选",
+  low: "低置信候选",
+};
+const confidenceLabel = computed(() =>
+  props.confidence ? CONFIDENCE_LABEL[props.confidence] ?? props.confidence : ""
+);
+const emit = defineEmits<{ confirmed: [] }>();
 
 const editing = ref(false);
 const draft = ref("");
@@ -43,6 +54,17 @@ async function save() {
     error.value = (e as Error).message;
   }
 }
+
+async function confirm() {
+  error.value = "";
+  try {
+    const result = await confirmWebsite(props.companyId);
+    currentConfirmed.value = result.website_confirmed;
+    emit("confirmed");
+  } catch (e) {
+    error.value = (e as Error).message;
+  }
+}
 </script>
 
 <template>
@@ -64,8 +86,21 @@ async function save() {
       >未填写</span>
       <span
         v-if="current && currentConfirmed"
-        class="badge"
+        class="badge precise"
       >已确认</span>
+      <span
+        v-else-if="current && confidenceLabel"
+        class="badge potential"
+        :title="`补全服务返回的候选（${confidenceLabel}），确认后才用于查联系人`"
+      >{{ confidenceLabel }}</span>
+      <button
+        v-if="current && !currentConfirmed"
+        class="small"
+        data-testid="confirm-website"
+        @click="confirm"
+      >
+        确认是官网
+      </button>
       <button
         class="small ghost"
         data-testid="edit-website"

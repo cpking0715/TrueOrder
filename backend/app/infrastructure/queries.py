@@ -230,6 +230,8 @@ class SqlBuyerQueries:
                 "same_name_conflict": bool(company.same_name_conflict),
                 "website": company.website,
                 "website_confirmed": bool(company.website_confirmed),
+                "website_source": company.website_source or "",
+                "website_confidence": company.website_confidence or "",
             }
         )
 
