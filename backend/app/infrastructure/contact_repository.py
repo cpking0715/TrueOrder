@@ -248,7 +248,7 @@ class SqlContactRepository:
                 )
             else:
                 summary.added += 1
-        self._session.commit()
+        # add 内行级 commit：导入语义为逐行持久化（非原子），已知行为见 HANDOFF
         return summary
 
     def _resolve_company(self, row: dict) -> tuple[int | None, str | None]:

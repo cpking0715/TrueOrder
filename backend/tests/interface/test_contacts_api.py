@@ -213,8 +213,8 @@ class Test生产会话语义:
         """
         from fastapi.testclient import TestClient
         from sqlalchemy import create_engine
-        from sqlalchemy.orm import sessionmaker
 
+        from app.infrastructure.db import make_session_factory
         from app.infrastructure.orm import Base
         from app.interface import deps
         from app.interface.main import create_app
@@ -222,7 +222,7 @@ class Test生产会话语义:
         engine_fresh = create_engine(engine.url.render_as_string(hide_password=False))
         Base.metadata.drop_all(engine_fresh)
         Base.metadata.create_all(engine_fresh)
-        monkeypatch.setattr(deps, "_session_factory", lambda: sessionmaker(bind=engine_fresh))
+        monkeypatch.setattr(deps, "_session_factory", lambda: make_session_factory(engine_fresh))
         app = create_app()  # 不 override get_session：走真实的 deps.get_session
         with TestClient(app) as client:
             _seed(client)
@@ -299,8 +299,8 @@ class Test失败路径不提交:
         """回归锁：失败请求不得因会话 teardown 而意外提交（响应后提交竞态的镜像用例）。"""
         from fastapi.testclient import TestClient
         from sqlalchemy import create_engine, text
-        from sqlalchemy.orm import sessionmaker
 
+        from app.infrastructure.db import make_session_factory
         from app.infrastructure.orm import Base
         from app.interface import deps
         from app.interface.main import create_app
@@ -308,7 +308,7 @@ class Test失败路径不提交:
         engine_fresh = create_engine(engine.url.render_as_string(hide_password=False))
         Base.metadata.drop_all(engine_fresh)
         Base.metadata.create_all(engine_fresh)
-        monkeypatch.setattr(deps, "_session_factory", lambda: sessionmaker(bind=engine_fresh))
+        monkeypatch.setattr(deps, "_session_factory", lambda: make_session_factory(engine_fresh))
         app = create_app()
         with TestClient(app) as client:
             _seed(client)
@@ -328,3 +328,32 @@ class Test失败路径不提交:
                 ).scalar_one()
         engine_fresh.dispose()
         assert count == 1, "409 路径不应产生第二条或丢失第一条"
+
+
+class Test并发兜底分支:
+    def test_唯一约束兜底回滚且会话可用(self, client, monkeypatch):
+        """锁住 IntegrityError 兜底语义：预查重失效（并发窗口）时唯一约束拦下，
+        rollback 后会话可用、无脏数据残留、不产生第二条。"""
+        from app.infrastructure.contact_repository import SqlContactRepository
+
+        ids = _seed(client)
+        cid = ids["company_id"]
+        first = client.post(
+            f"/api/companies/{cid}/contacts", json={"email": "guard@ex.com"}
+        )
+        assert first.status_code == 201
+
+        real = SqlContactRepository._duplicate_exists
+
+        def blind(self, company_id, email, exclude_contact_id=None):
+            return False  # 模拟并发窗口：预查重看不到已有行
+
+        monkeypatch.setattr(SqlContactRepository, "_duplicate_exists", blind)
+        clash = client.post(
+            f"/api/companies/{cid}/contacts", json={"email": "GUARD@ex.com"}
+        )
+        monkeypatch.setattr(SqlContactRepository, "_duplicate_exists", real)
+        assert clash.status_code == 409
+        listing = client.get(f"/api/companies/{cid}/contacts").json()
+        guards = [c for c in listing if c["email"] == "guard@ex.com"]
+        assert len(guards) == 1, "兜底分支必须只留唯一一条"
