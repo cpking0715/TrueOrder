@@ -250,6 +250,11 @@ export interface components {
             scores: components["schemas"]["CompanyScoreOut"][];
             /** Bills */
             bills: components["schemas"]["CompanyBillOut"][];
+            /**
+             * Bills Truncated
+             * @default false
+             */
+            bills_truncated: boolean;
         };
         /** CompanyOut */
         CompanyOut: {

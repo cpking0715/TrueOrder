@@ -347,3 +347,104 @@ class Test双受众产品:
 
         detail_all = client.get(f"/api/companies/{weaving_id}").json()
         assert len(detail_all["scores"]) == 1  # 该公司只在 factory 受众有得分
+
+
+class Test建产品只打分新产品:
+    def test_建新产品不重算既有产品得分(self, client, engine):
+        """create_product 只打分新产品：既有产品的得分行 id 与 computed_at 不变。"""
+        from sqlalchemy import text
+
+        seed_via_api(client)
+        with engine.connect() as conn:
+            garment_id = conn.execute(
+                text("select id from products where code = 'P-GARMENT'")
+            ).scalar_one()
+            before = conn.execute(
+                text(
+                    "select id, computed_at from company_scores "
+                    "where product_id = :p order by id"
+                ),
+                {"p": garment_id},
+            ).all()
+        assert before, "种子导入后应有 P-GARMENT 得分"
+        r = client.post(
+            "/api/products",
+            json={"name": "新查税号", "hs_code": "847989", "buyer_type": "importer"},
+        )
+        assert r.status_code == 201, r.text
+        with engine.connect() as conn:
+            after = conn.execute(
+                text(
+                    "select id, computed_at from company_scores "
+                    "where product_id = :p order by id"
+                ),
+                {"p": garment_id},
+            ).all()
+        assert [row.id for row in before] == [row.id for row in after], "得分行被重建"
+        assert [row.computed_at for row in before] == [row.computed_at for row in after]
+
+
+class Test导出公式注入:
+    def test_恶意公司名导出被转义(self, client):
+        import csv
+        import io
+
+        seed_via_api(client)
+        malicious = '=HYPERLINK("http://evil.example","click me")'
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(
+            [
+                "arrival_date", "bill_number", "consignee_name", "consignee_address",
+                "consignee_country", "shipper_name", "shipper_address", "shipper_country",
+                "origin_country", "hs_code", "product_description", "port", "quantity",
+            ]
+        )
+        writer.writerow(
+            [
+                "2026-02-10", "BOL-EVIL", malicious, "1 EVIL ST, NY", "US",
+                "HANGZHOU GARMENT CO LTD", "NO 66 RD, HANGZHOU, CN", "CN", "CHINA",
+                "620462", "TROUSERS", "NEW YORK", "10",
+            ]
+        )
+        bills_csv = buf.getvalue()
+        r = client.post(
+            "/api/bills/import",
+            files={"file": ("evil.csv", bills_csv, "text/csv")},
+            data={"as_of": AS_OF},
+        )
+        assert r.status_code == 200, r.text
+        export = client.get("/api/products/1/buyers/export.csv", params={"audience": "importer"})
+        assert export.status_code == 200
+        text = export.text
+        assert "'=HYPERLINK" in text, "恶意公司名未加前缀转义"
+
+
+class Test上传上限:
+    def test_超限上传返回413且库内无新增(self, client, engine):
+        from sqlalchemy import text as sql_text
+
+        from app.core.config import Settings, get_settings
+
+        client.app.dependency_overrides[get_settings] = lambda: Settings(max_upload_mb=1)
+        big = "x" * (1024 * 1024 + 1)
+        r = client.post(
+            "/api/bills/import",
+            files={"file": ("big.csv", big, "text/csv")},
+        )
+        assert r.status_code == 413, r.text
+        with engine.connect() as conn:
+            count = conn.execute(sql_text("select count(*) from raw_bills")).scalar_one()
+        assert count == 0
+
+
+class Test建产品409与并发:
+    def test_同名同税号同受众返回409带既有id(self, client):
+        payload = {"name": "重复产品", "hs_code": "620462", "buyer_type": "importer"}
+        first = client.post("/api/products", json=payload)
+        assert first.status_code == 201, first.text
+        again = client.post("/api/products", json=payload)
+        assert again.status_code == 409, again.text
+        assert again.json()["detail"]["product_id"] == first.json()["product_id"]
+
+

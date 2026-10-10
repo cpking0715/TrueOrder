@@ -9,6 +9,7 @@ from app.interface.schemas import (
     CompanyDetailOut,
     CompanyOut,
     CompanyScoreOut,
+    ProductOut,
     ReasonOut,
 )
 
@@ -22,6 +23,19 @@ def _reasons(payload: list[dict]) -> list[ReasonOut]:
         )
         for item in payload or []
     ]
+
+
+def product_row_to_out(row: dict) -> ProductOut:
+    return ProductOut(
+        product_id=row["product_id"],
+        code=row["code"],
+        name=row["name"],
+        description=row["description"],
+        buyer_type=row["buyer_type"],
+        hs_codes=row["hs_codes"],  # type: ignore[arg-type]
+        counts=row["counts"],
+        counts_by_audience=row.get("counts_by_audience", {}),
+    )
 
 
 def buyer_to_out(row: BuyerRow) -> BuyerOut:
@@ -73,4 +87,5 @@ def company_detail_to_out(detail: CompanyDetail) -> CompanyDetailOut:
             )
             for b in detail.bills
         ],
+        bills_truncated=detail.bills_truncated,
     )

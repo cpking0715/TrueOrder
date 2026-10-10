@@ -40,7 +40,7 @@ class RescoreService:
     def _rescore_one(self, product: ProductConfig, as_of: date) -> RescoreSummary:
         audiences = sorted({a.audience for a in product.hs_assignments})
         families = sorted({hs_family_prefix(a.hs_code) for a in product.hs_assignments})
-        pool = self._pool.load_pool(families)
+        pool = self._pool.load_pool(families, as_of)
         results: list[ScoreResult] = []
         for audience in audiences:
             for facts in pool:

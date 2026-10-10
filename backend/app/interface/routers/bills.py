@@ -6,6 +6,7 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
 
+from app.core.config import Settings, get_settings
 from app.infrastructure.importers import CsvImporter
 from app.infrastructure.queries import SqlBuyerQueries
 from app.interface.deps import get_buyer_queries, get_importer
@@ -20,10 +21,16 @@ async def import_bills_csv(
     file: UploadFile,
     as_of: date | None = Form(default=None),
     importer: CsvImporter = Depends(get_importer),
+    settings: Settings = Depends(get_settings),
 ):
     """提单 CSV 导入：企业归并 + 去重 + 自动重打分。as_of 缺省用今天。"""
+    data = await file.read()
+    if len(data) > settings.max_upload_mb * 1024 * 1024:
+        raise HTTPException(
+            status_code=413, detail=f"文件超过上传上限 {settings.max_upload_mb} MB"
+        )
     try:
-        csv_text = (await file.read()).decode("utf-8-sig")
+        csv_text = data.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
         raise HTTPException(status_code=422, detail=f"CSV 必须是 UTF-8：{exc}") from exc
     summary, rescores = importer.import_bills(

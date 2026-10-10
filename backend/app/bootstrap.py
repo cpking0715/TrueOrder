@@ -1,4 +1,4 @@
-"""启动前初始化：建表 + 导入示例产品与非全量提单样本。幂等，可重复执行。
+"""启动前初始化：迁移到 head + 导入示例产品与非全量提单样本。幂等，可重复执行。
 
 用法：uv run python -m app.bootstrap [--drop]
 """
@@ -9,8 +9,11 @@ import argparse
 from datetime import date
 from pathlib import Path
 
+from alembic.config import Config as AlembicConfig
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
+from alembic import command
 from app.core.config import get_settings
 from app.infrastructure.db import make_engine
 from app.infrastructure.importers import CsvImporter
@@ -21,19 +24,46 @@ SEED_DIR = Path(__file__).parent / "seed"
 # 让演示分层与 sample_bills.README.md 的场景对照表失真。界面/API 导入不受影响。
 SEED_AS_OF = date(2026, 10, 9)
 
+ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
+
+
+def _alembic_config(database_url: str) -> AlembicConfig:
+    cfg = AlembicConfig(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", database_url)
+    return cfg
+
+
+def _ensure_schema(database_url: str) -> None:
+    """建表走 Alembic；create_all 时代的旧库直接 stamp 到 head，不重复建。"""
+    engine = make_engine(database_url)
+    inspector = inspect(engine)
+    has_tables = inspector.has_table("companies")
+    has_alembic = inspector.has_table("alembic_version")
+    engine.dispose()
+    cfg = _alembic_config(database_url)
+    if has_tables and not has_alembic:
+        command.stamp(cfg, "head")
+        print("检测到迁移前旧库，已标记为 head")
+    else:
+        command.upgrade(cfg, "head")
+    print("schema 已就绪（alembic head）")
+
 
 def main(drop: bool = False) -> None:
-    engine = make_engine(get_settings().database_url)
+    database_url = get_settings().database_url
     if drop:
+        engine = make_engine(database_url)
         Base.metadata.drop_all(engine)
+        with engine.begin() as conn:
+            conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
+        engine.dispose()
         print("已删除全部表（--drop）")
-    Base.metadata.create_all(engine)
-    print("schema 已就绪")
+    _ensure_schema(database_url)
 
     products_csv = (SEED_DIR / "products.csv").read_text(encoding="utf-8-sig")
     bills_csv = (SEED_DIR / "sample_bills.csv").read_text(encoding="utf-8-sig")
 
-    with Session(engine) as session:
+    with Session(make_engine(database_url)) as session:
         importer = CsvImporter(session)
         p = importer.import_products(products_csv, source="seed/products.csv")
         b, rescores = importer.import_bills(

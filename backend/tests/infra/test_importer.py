@@ -187,3 +187,41 @@ class Test买家查询与全文检索:
         assert detail.scores[0]["tier"] == "precise"
         supplier_reason = [r for r in detail.scores[0]["reasons"] if r["code"] == "SUPPLIER_MATCH"]
         assert supplier_reason and supplier_reason[0]["bill_ids"]
+
+
+class TestP1缺陷修复:
+    def test_同文件完全相同行只入一票并计重复(self, session):
+        """同一 CSV 内两行完全相同：inserted==1、duplicate==1，不得抛异常。"""
+        row = "2026-02-10,BOL-001,BROOKLYN APPAREL LLC,\"350 FIFTH AVE, NEW YORK NY 10118, USA\",US,HANGZHOU GARMENT CO LTD,\"NO 66 RD, HANGZHOU, CN\",CN,CHINA,620462,WOMENS COTTON TROUSERS,NEW YORK,1200"
+        csv_text = (
+            "arrival_date,bill_number,consignee_name,consignee_address,consignee_country,"
+            "shipper_name,shipper_address,shipper_country,origin_country,hs_code,"
+            "product_description,port,quantity\n" + row + "\n" + row + "\n"
+        )
+        summary, _ = CsvImporter(session).import_bills(csv_text, rescore=False)
+        assert summary.inserted_bills == 1
+        assert summary.duplicate_bills == 1
+
+    def test_窗口外提单不进入候选池(self, session):
+        """load_pool 按 as_of 往前 24 个月过滤；窗外提单（2024-05 的 ANCIENT）不进候选。"""
+        from app.infrastructure.repositories import SqlBuyerPoolReader
+
+        importer = CsvImporter(session)
+        importer.import_products(PRODUCTS_CSV)
+        importer.import_bills(BILLS_CSV, as_of=AS_OF)
+        pool = SqlBuyerPoolReader(session).load_pool(["6204"], AS_OF)
+        names = {f.normalized_name for f in pool}
+        assert "BROOKLYN APPAREL" in "".join(names) or any("BROOKLYN" in n for n in names)
+        assert not any("ANCIENT" in n for n in names)
+
+    def test_查重分批行为等价(self, session, monkeypatch):
+        """HASH_QUERY_BATCH 调小后，跨批去重行为与单批一致（锁住分批逻辑）。"""
+        CsvImporter.HASH_QUERY_BATCH = 3
+        try:
+            importer = CsvImporter(session)
+            importer.import_bills(BILLS_CSV, rescore=False)  # 12 票，跨多批
+            summary, _ = importer.import_bills(BILLS_CSV, rescore=False)  # 全部已存在
+            assert summary.inserted_bills == 0
+            assert summary.duplicate_bills == 13
+        finally:
+            CsvImporter.HASH_QUERY_BATCH = 50000

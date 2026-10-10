@@ -29,3 +29,6 @@ Thumbs.db
 # 导出的产物（生成型文件不入库的例外见 README）
 openapi.json
 frontend/tsconfig.tsbuildinfo
+
+# 性能基准生成的合成数据（工具 gen_bills.py 产物，不入库）
+backend/tests/perf/bills_*.csv

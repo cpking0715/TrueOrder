@@ -20,6 +20,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSON, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -99,6 +100,8 @@ class RawBillORM(Base):
         Index("ix_raw_bills_consignee", "consignee_company_id"),
         Index("ix_raw_bills_shipper", "shipper_company_id"),
         Index("ix_raw_bills_arrival", "arrival_date"),
+        # 打分候选池按「税号 4 位前缀 + 到港窗口」过滤的复合表达式索引
+        Index("ix_raw_bills_hs4_arrival", text("left(hs_code, 4)"), "arrival_date"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

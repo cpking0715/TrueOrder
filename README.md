@@ -2,8 +2,9 @@
 
 给自家企业用的海外买家库：**以自家产品为入口**，把海运提单授权数据按税号聚成「潜在客户 / 精准客户」名单，打分可解释（每条理由点回提单），当前筛选可导出 CSV。
 
-- 不做注册计费、不做开发信、不对外售卖名单。
-- 不爬提单网站；不把 Apollo / People Data Labs / Hunter / Google Places 等按次查询源灌入库。
+- 不做注册计费、不对外售卖名单；开发信与按次查询补全按受控规则执行（见 `AGENTS.md` 硬约束）。
+- 不爬提单网站；仅允许抓取企业自有官网公开页（robots.txt + 限速）；
+  按次查询源只对用户选定的企业调用补全，结果带来源与时间，有每日上限。
 - 当前为**非全量公开样本**演示（页面有醒目声明）；正式使用需购买允许建索引的授权提单数据后走同一导入入口。
 
 ## 技术栈
@@ -32,7 +33,7 @@ docker run -d --name trueorder-pg -e POSTGRES_USER=trueorder -e POSTGRES_PASSWOR
 ```bash
 cd backend
 uv sync
-uv run python -m app.bootstrap     # 建表 + 导入两个示例产品与非全量提单样本（幂等）
+uv run python -m app.bootstrap     # Alembic 迁移到 head + 导入示例产品与非全量提单样本（幂等）
 uv run uvicorn app.interface.main:app --port 8000
 ```
 
@@ -68,11 +69,20 @@ pnpm build      # 产物由后端托管
 
 > **升级注意（去重指纹变更）**：提单去重指纹的字段集在 2026-10-09 的提交 `aae6768` 中扩展过（纳入原产国/港口/数量、描述全量）。指纹算法变更后，**对旧库再次导入同一 CSV 会因哈希不同而双份入库**。已有数据的库升级代码版本后，请重建库（`uv run python -m app.bootstrap --drop` 后重导授权数据），不要在旧库上直接追加导入。
 
+## 数据库迁移
+
+schema 由 Alembic 管理（`backend/alembic/`）。`app.bootstrap` 会自动 `upgrade head`；
+`create_all` 时代的旧库首次运行 bootstrap 会被无损标记（stamp）到当前 head。
+schema 变更流程：改 ORM → 对空基准库 `alembic revision --autogenerate` → 跑迁移测试。
+
 ## 测试
 
 ```bash
 cd backend && uv run pytest -q          # 领域 + 基础设施 + 接口（需 5433 测试库，自动创建）
+cd backend && uv run pytest -q -m smoke # e2e 冒烟（默认命令不含）
 cd frontend && pnpm test                # Vitest：composable + 组件（Testing Library）
 ```
 
-冒烟：起服务后走一遍 产品列表 → 产品详情（潜在/精准页签）→ 公司抽屉（票数/最近到港/供货方/理由带提单号）→ 导出 CSV。
+冒烟（`-m smoke`）走：产品列表 → 产品详情（潜在/精准页签）→ 公司抽屉（票数/最近到港/供货方/理由带提单号）→ 导出 CSV 内容校验。
+
+性能基准（合成数据 10 万–100 万行）见 `docs/perf.md`，工具在 `backend/tests/perf/`。

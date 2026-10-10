@@ -4,17 +4,20 @@ from __future__ import annotations
 
 import csv
 import io
+from collections.abc import Iterator
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 
+from app.core.config import Settings, get_settings
 from app.domain.parse import build_quick_product
 from app.infrastructure.importers import CsvImporter
 from app.infrastructure.queries import BuyerQueryFilters, SqlBuyerQueries
 from app.infrastructure.repositories import SqlProductRepository
+from app.interface.csv_safety import sanitize_csv_cell
 from app.interface.deps import get_buyer_queries, get_importer, get_product_repository
-from app.interface.mapping import buyer_to_out
+from app.interface.mapping import buyer_to_out, product_row_to_out
 from app.interface.schemas import (
     BuyerListOut,
     ImportSummaryOut,
@@ -26,30 +29,17 @@ router = APIRouter(prefix="/api/products", tags=["products"])
 
 
 def _default_audience(queries: SqlBuyerQueries, product_id: int) -> str:
-    products = queries.list_products_with_counts()
-    for p in products:
-        if p["product_id"] == product_id:
-            if p["buyer_type"] in ("importer", "factory"):
-                return p["buyer_type"]
-            return "importer"  # both 产品由前端显式切换受众
-    raise HTTPException(status_code=404, detail=f"产品 {product_id} 不存在")
+    buyer_type = queries.get_product_buyer_type(product_id)
+    if buyer_type is None:
+        raise HTTPException(status_code=404, detail=f"产品 {product_id} 不存在")
+    if buyer_type in ("importer", "factory"):
+        return buyer_type
+    return "importer"  # both 产品由前端显式切换受众
 
 
 @router.get("", response_model=list[ProductOut])
 def list_products(queries: SqlBuyerQueries = Depends(get_buyer_queries)):
-    return [
-        ProductOut(
-            product_id=p["product_id"],
-            code=p["code"],
-            name=p["name"],
-            description=p["description"],
-            buyer_type=p["buyer_type"],
-            hs_codes=p["hs_codes"],  # type: ignore[arg-type]
-            counts=p["counts"],
-            counts_by_audience=p.get("counts_by_audience", {}),
-        )
-        for p in queries.list_products_with_counts()
-    ]
+    return [product_row_to_out(p) for p in queries.list_products_with_counts()]
 
 
 @router.post("", response_model=ProductOut, status_code=201)
@@ -60,34 +50,34 @@ def create_product(
     importer: CsvImporter = Depends(get_importer),
 ):
     """「填产品找客户」：建产品并立即在已导入提单库上打分，返回带计数的完整产品。"""
-    product, error = build_quick_product(
-        code=repo.next_quick_code(),
-        name=payload.name,
-        hs_code=payload.hs_code,
-        buyer_type=payload.buyer_type,
-        description=payload.description,
-        buyer_keywords=payload.buyer_keywords,
-        peer_keywords=payload.peer_keywords,
+    duplicate_id = repo.find_quick_duplicate(
+        payload.name.strip(), payload.hs_code.strip(), payload.buyer_type
     )
-    if error or product is None:
-        raise HTTPException(status_code=422, detail=error or "产品创建失败")
-    product_id = repo.upsert_product(product)
-    importer.rescore(date.today())
+    if duplicate_id is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={"message": "同名同税号同受众的产品已存在", "product_id": duplicate_id},
+        )
+    product_id, quick_error = repo.create_quick(
+        lambda code: build_quick_product(
+            code=code,
+            name=payload.name,
+            hs_code=payload.hs_code,
+            buyer_type=payload.buyer_type,
+            description=payload.description,
+            buyer_keywords=payload.buyer_keywords,
+            peer_keywords=payload.peer_keywords,
+        )
+    )
+    if quick_error or product_id == 0:
+        raise HTTPException(status_code=422, detail=quick_error or "产品创建失败")
+    importer.rescore_one(product_id, date.today())
     row = next(
         (p for p in queries.list_products_with_counts() if p["product_id"] == product_id), None
     )
     if row is None:
         raise HTTPException(status_code=500, detail="产品已创建但查询计数失败")
-    return ProductOut(
-        product_id=row["product_id"],
-        code=row["code"],
-        name=row["name"],
-        description=row["description"],
-        buyer_type=row["buyer_type"],
-        hs_codes=row["hs_codes"],  # type: ignore[arg-type]
-        counts=row["counts"],
-        counts_by_audience=row.get("counts_by_audience", {}),
-    )
+    return product_row_to_out(row)
 
 
 @router.get("/{product_id}/buyers", response_model=BuyerListOut)
@@ -163,29 +153,35 @@ def export_buyers(
             for r in buyer.reasons
         )
 
-    buffer = io.StringIO()
-    buffer.write("\ufeff")  # Excel 友好的 BOM
-    writer = csv.writer(buffer)
-    header = ["公司名", "国家", "城市", "等级", "票数", "最近到港", "供货方", "同名冲突", "排除原因", "得分理由"]  # noqa: E501
-    writer.writerow(header)
-    for buyer in items:
-        writer.writerow(
-            [
-                buyer.name,
-                buyer.country,
-                buyer.city,
-                buyer.tier,
-                buyer.shipments,
-                buyer.last_arrival or "",
-                "; ".join(buyer.suppliers),
-                "是" if buyer.same_name_conflict else "",
-                buyer.exclusion_code or "",
-                reason_text(buyer),
-            ]
+    def _row(values: list) -> str:
+        buf = io.StringIO()
+        csv.writer(buf).writerow(values)
+        return buf.getvalue()
+
+    def stream() -> Iterator[str]:
+        yield "\ufeff"  # Excel 友好的 BOM
+        yield _row(
+            ["公司名", "国家", "城市", "等级", "票数", "最近到港", "供货方", "同名冲突", "排除原因", "得分理由"]  # noqa: E501
         )
+        for buyer in items:
+            yield _row(
+                [
+                    sanitize_csv_cell(buyer.name),
+                    sanitize_csv_cell(buyer.country),
+                    sanitize_csv_cell(buyer.city),
+                    sanitize_csv_cell(buyer.tier),
+                    sanitize_csv_cell(buyer.shipments),
+                    sanitize_csv_cell(buyer.last_arrival or ""),
+                    sanitize_csv_cell("; ".join(buyer.suppliers)),
+                    sanitize_csv_cell("是" if buyer.same_name_conflict else ""),
+                    sanitize_csv_cell(buyer.exclusion_code or ""),
+                    sanitize_csv_cell(reason_text(buyer)),
+                ]
+            )
+
     filename = f"buyers_product{product_id}_{audience}_{tier or 'all'}.csv"
     return StreamingResponse(
-        iter([buffer.getvalue()]),
+        stream(),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
@@ -195,10 +191,16 @@ def export_buyers(
 async def import_products_csv(
     file: UploadFile,
     importer: CsvImporter = Depends(get_importer),
+    settings: Settings = Depends(get_settings),
 ):
     """产品目录 CSV 导入：每行一个产品 + 税号 + 买家类型，多行税号自动合并。"""
+    data = await file.read()
+    if len(data) > settings.max_upload_mb * 1024 * 1024:
+        raise HTTPException(
+            status_code=413, detail=f"文件超过上传上限 {settings.max_upload_mb} MB"
+        )
     try:
-        csv_text = (await file.read()).decode("utf-8-sig")
+        csv_text = data.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
         raise HTTPException(status_code=422, detail=f"CSV 必须是 UTF-8：{exc}") from exc
     summary = importer.import_products(csv_text, source=file.filename or "upload")

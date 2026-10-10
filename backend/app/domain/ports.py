@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import date
 from typing import Protocol
 
 from app.domain.entities import CompanyFacts, ProductConfig, ScoreResult
@@ -15,9 +16,11 @@ class ProductReader(Protocol):
 
 
 class BuyerPoolReader(Protocol):
-    """按税号族（4 位前缀）装载候选企业及其全部相关提单事实。"""
+    """按税号族（4 位前缀）装载候选企业及其窗内提单事实（as_of 往前 24 个月）。"""
 
-    def load_pool(self, family_prefixes: Sequence[str]) -> list[CompanyFacts]: ...
+    def load_pool(
+        self, family_prefixes: Sequence[str], as_of: date
+    ) -> list[CompanyFacts]: ...
 
 
 class ScoreWriter(Protocol):

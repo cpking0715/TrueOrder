@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Sequence
+from datetime import date
 
 from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.domain.entities import (
@@ -17,7 +19,7 @@ from app.domain.entities import (
     ScoreReason,
     ScoreResult,
 )
-from app.domain.normalize import normalize_company_name
+from app.domain.normalize import months_before, normalize_company_name
 from app.infrastructure.orm import (
     CompanyORM,
     CompanyScoreORM,
@@ -87,6 +89,36 @@ class SqlProductRepository:
                 max_n = max(max_n, int(suffix))
         return f"QUICK-{max_n + 1:04d}"
 
+    def find_quick_duplicate(self, name: str, hs_code: str, buyer_type: str) -> int | None:
+        """同名同税号同受众的既有产品 id（快速建产品的重复判定）。"""
+        row = self._session.execute(
+            select(ProductORM.id)
+            .join(ProductHsCodeORM, ProductHsCodeORM.product_id == ProductORM.id)
+            .where(
+                ProductORM.name == name,
+                ProductORM.buyer_type == buyer_type,
+                ProductHsCodeORM.hs_code == hs_code,
+            )
+        ).first()
+        return int(row[0]) if row else None
+
+    def create_quick(self, build) -> tuple[int, str | None]:
+        """取号并插入快速产品；并发撞唯一编号时自动换号重试（最多 3 次）。
+
+        build(code) 返回 (ProductConfig | None, 错误描述 | None)，与 build_quick_product 一致。
+        """
+        for attempt in range(3):
+            product, error = build(self.next_quick_code())
+            if error or product is None:
+                return 0, error
+            try:
+                return self.upsert_product(product), None
+            except IntegrityError:
+                self._session.rollback()
+                if attempt == 2:
+                    return 0, "产品编码冲突，请重试"
+        return 0, "unreachable"
+
     def upsert_product(self, product: ProductConfig) -> int:
         """按 code 更新产品并整体替换税号对应关系（幂等）。"""
         existing = self._session.scalar(select(ProductORM).where(ProductORM.code == product.code))
@@ -130,13 +162,15 @@ class SqlBuyerPoolReader:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def load_pool(self, family_prefixes: Sequence[str]) -> list[CompanyFacts]:
+    def load_pool(self, family_prefixes: Sequence[str], as_of: date) -> list[CompanyFacts]:
         if not family_prefixes:
             return []
+        window_start = months_before(as_of, 24)
         bills = list(
             self._session.scalars(
                 select(RawBillORM).where(
-                    func.left(RawBillORM.hs_code, 4).in_(list(family_prefixes))
+                    func.left(RawBillORM.hs_code, 4).in_(list(family_prefixes)),
+                    RawBillORM.arrival_date >= window_start,
                 )
             )
         )

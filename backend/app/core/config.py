@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     database_url: str = (
         "postgresql+psycopg://trueorder:trueorder@localhost:5433/trueorder"
     )
+    # CSV 上传上限（MB）：产品与提单导入端点共用，超出返回 413
+    max_upload_mb: int = 20
     # 样本声明：界面必须展示「非全量库」
     sample_notice: str = (
         "当前库内为公开样本数据（非全量样本）：仅用于演示产品页、打分与导出，"

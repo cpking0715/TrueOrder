@@ -125,3 +125,4 @@ class CompanyDetailOut(BaseModel):
     company: CompanyOut
     scores: list[CompanyScoreOut]
     bills: list[CompanyBillOut]
+    bills_truncated: bool = False

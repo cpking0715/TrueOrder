@@ -7,6 +7,7 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
+    "alembic>=1.20.0",
     "fastapi>=0.143.0",
     "psycopg[binary]>=3.3.6",
     "pydantic-settings>=2.15.0",
@@ -14,13 +15,6 @@ dependencies = [
     "sqlalchemy>=2.0",
     "uvicorn[standard]>=0.54.0",
 ]
-
-[project.scripts]
-trueorder-backend = "trueorder_backend:main"
-
-[build-system]
-requires = ["uv_build>=0.12.3,<0.13.0"]
-build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
@@ -48,4 +42,6 @@ select = ["E", "F", "I", "UP", "B"]
 "app/interface/**" = ["B008"]
 # 内嵌 CSV fixture 的行宽由数据决定，不做代码折行
 "tests/infra/test_importer.py" = ["E501"]
+"tests/infra/test_queries.py" = ["E501"]
 "tests/interface/test_api.py" = ["E501"]
+"alembic/versions/*" = ["E501"]

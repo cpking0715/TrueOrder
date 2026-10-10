@@ -51,6 +51,7 @@ class CompanyDetail:
     company: dict
     scores: list[dict] = field(default_factory=list)
     bills: list[dict] = field(default_factory=list)
+    bills_truncated: bool = False
 
 
 def _fts_condition(q: str) -> ColumnElement[bool] | None:
@@ -176,8 +177,18 @@ class SqlBuyerQueries:
                 )
         return list(by_id.values())
 
+    def get_product_buyer_type(self, product_id: int) -> str | None:
+        """单产品查询买家类型（默认受众用，不拉全部产品列表）。"""
+        return self._session.scalar(
+            select(ProductORM.buyer_type).where(ProductORM.id == product_id)
+        )
+
     def company_detail(
-        self, company_id: int, product_id: int | None = None, audience: str | None = None
+        self,
+        company_id: int,
+        product_id: int | None = None,
+        audience: str | None = None,
+        bill_limit: int = 500,
     ) -> CompanyDetail | None:
         company = self._session.get(CompanyORM, company_id)
         if company is None:
@@ -215,16 +226,19 @@ class SqlBuyerQueries:
                 }
             )
 
-        bills = self._session.scalars(
-            select(RawBillORM)
-            .where(
-                (RawBillORM.consignee_company_id == company_id)
-                | (RawBillORM.shipper_company_id == company_id)
+        bills = list(
+            self._session.scalars(
+                select(RawBillORM)
+                .where(
+                    (RawBillORM.consignee_company_id == company_id)
+                    | (RawBillORM.shipper_company_id == company_id)
+                )
+                .order_by(RawBillORM.arrival_date.desc(), RawBillORM.id.desc())
+                .limit(bill_limit + 1)
             )
-            .order_by(RawBillORM.arrival_date.desc(), RawBillORM.id.desc())
-            .limit(500)
         )
-        for b in bills:
+        detail.bills_truncated = len(bills) > bill_limit
+        for b in bills[:bill_limit]:
             detail.bills.append(
                 {
                     "bill_id": b.id,

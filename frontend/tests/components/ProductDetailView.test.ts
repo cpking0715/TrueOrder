@@ -115,6 +115,7 @@ const companyFixture: CompanyDetail = {
       quantity: "1200 CTNS",
     },
   ],
+  bills_truncated: false,
 };
 
 function listFixture(tier: Buyer["tier"] | undefined, total: number): BuyerList {

@@ -25,6 +25,9 @@ from app.infrastructure.repositories import SqlBuyerPoolReader, SqlProductReposi
 
 
 class CsvImporter:
+    # PG 单语句参数上限 65535：bill_hash 查重必须分批，否则大 CSV 导入直接崩
+    HASH_QUERY_BATCH = 50000
+
     def __init__(self, session: Session) -> None:
         self._session = session
 
@@ -54,6 +57,8 @@ class CsvImporter:
         summary = ImportSummary()
         rescores: list[RescoreSummary] = []
         lines: list[tuple[BillLine, int]] = []
+        # 批内公司缓存：同文件重复公司不再逐行查库（导入 10 万行的性能关键路径）
+        company_cache: dict[str, CompanyORM | None] = {}
         for row_no, row in enumerate(csv.DictReader(io.StringIO(csv_text)), start=2):
             line, err = parse_bill_row(row, source_ref, row_no)
             if err or line is None:
@@ -63,11 +68,14 @@ class CsvImporter:
             lines.append((line, row_no))
 
         hashes = [bill_dedup_hash(line) for line, _ in lines]
-        existing = set(
-            self._session.scalars(
-                select(RawBillORM.bill_hash).where(RawBillORM.bill_hash.in_(hashes))
+        existing: set[str] = set()
+        for i in range(0, len(hashes), self.HASH_QUERY_BATCH):
+            chunk = hashes[i : i + self.HASH_QUERY_BATCH]
+            existing.update(
+                self._session.scalars(
+                    select(RawBillORM.bill_hash).where(RawBillORM.bill_hash.in_(chunk))
+                )
             )
-        )
 
         for (line, row_no), bill_hash in zip(lines, hashes, strict=True):
             if bill_hash in existing:
@@ -78,6 +86,7 @@ class CsvImporter:
                 line.consignee_address,
                 raw_country=line.consignee_country or "US",
                 summary=summary,
+                company_cache=company_cache,
             )
             shipper_id = (
                 self._upsert_company(
@@ -85,6 +94,7 @@ class CsvImporter:
                     line.shipper_address,
                     raw_country=line.shipper_country or line.origin_country or "US",
                     summary=summary,
+                    company_cache=company_cache,
                 )
                 if line.shipper_name
                 else None
@@ -115,6 +125,7 @@ class CsvImporter:
                 )
             )
             summary.inserted_bills += 1
+            existing.add(bill_hash)
 
         if rescore:
             rescores = self.rescore(as_of or date.today())
@@ -127,16 +138,21 @@ class CsvImporter:
         address: str,
         raw_country: str,
         summary: ImportSummary,
+        company_cache: dict[str, CompanyORM | None] | None = None,
     ) -> int | None:
         normalized = normalize_company_name(raw_name)
         if not normalized:
             return None
         country = normalize_country(raw_country) or "US"
-        existing = self._session.scalar(
-            select(CompanyORM).where(
-                CompanyORM.normalized_name == normalized, CompanyORM.country == country
+        cache_key = f"{normalized}\x00{country}"
+        if company_cache is not None and cache_key in company_cache:
+            existing = company_cache[cache_key]
+        else:
+            existing = self._session.scalar(
+                select(CompanyORM).where(
+                    CompanyORM.normalized_name == normalized, CompanyORM.country == country
+                )
             )
-        )
         if existing is None:
             company = CompanyORM(
                 normalized_name=normalized,
@@ -150,6 +166,8 @@ class CsvImporter:
             self._session.add(company)
             self._session.flush()
             summary.companies_created += 1
+            if company_cache is not None:
+                company_cache[cache_key] = company
             return company.id
 
         changed = False
@@ -177,6 +195,17 @@ class CsvImporter:
             scores=SqlScoreWriter(self._session),
         )
         result = service.rescore_all(as_of)
+        self._session.commit()
+        return result
+
+    def rescore_one(self, product_id: int, as_of: date) -> RescoreSummary | None:
+        """只重算单个产品（建产品时用，不动其他产品的得分行）。"""
+        service = RescoreService(
+            products=SqlProductRepository(self._session),
+            pool=SqlBuyerPoolReader(self._session),
+            scores=SqlScoreWriter(self._session),
+        )
+        result = service.rescore_product(product_id, as_of)
         self._session.commit()
         return result
 
