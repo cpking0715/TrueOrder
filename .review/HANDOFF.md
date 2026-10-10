@@ -339,3 +339,15 @@ base=61fd58b  head=01babf6
 | `pnpm test` | **30 passed** |
 
 排查过程记录（供复审参考）：F2 修复先后尝试 savepoint context/显式两版均表现异常，最终定位为**测试自身 CSV 列数错误**（6 列被当 7 列解析，email 落到 title 列、插入 email=NULL 行绕过一切去重），期间两次按行号改测试误删语句；换 csv.writer 生成测试数据并恢复被删语句后，预查重方案一次通过。产品代码的 savepoint 方案本身是否可行未继续验证（预查重方案更简单可预测，已采用）。
+
+## 复审记录（Claude Code 2026-10-10，对修复轮 c2762f7）
+
+verdict：**F1-F4 全部 verified**（复审通过读 fastapi 0.143 源码确认异常路径不提交、预查重可见性依赖 autoflush=False 下的显式 flush、测试数据列数逐行核对）。3 条新问题处理（2919cd2）：
+
+| 编号 | 严重度 | 结论 | 处理 |
+| --- | --- | --- | --- |
+| N1 deps 自动 commit 在响应发出之后执行：客户端拿到 2xx 时事务可能未提交（前端新增后立即刷新的读写竞态）；提交失败无法转为错误响应 | minor 偏上 | **成立，fixed** | 撤销 deps 自动 commit，写方法（add/update/delete/update_website）改为**响应前显式 commit**——与 importers 既有惯例一致；生产式跨请求持久化测试保持绿 |
+| N2 缺「4xx 路径不提交」回归锁（依赖 fastapi 源码行为，无测试防退化） | minor | **成立，fixed** | 新增 409 路径不落库测试（生产式会话工厂，race@ex.com 唯一一条） |
+| N3 跨请求持久化测试库 URL 硬编码、engine 参数未用 | nit | **成立，fixed** | 改用 `engine.url.render_as_string(hide_password=False)`——注意 `str(url)` 会把密码打码导致认证失败（已踩坑修正） |
+
+最终状态（2919cd2）：189 passed + smoke 2 + ruff 干净 + 前端 30。WP1 交付。
