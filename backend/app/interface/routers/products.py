@@ -80,6 +80,17 @@ def create_product(
     return product_row_to_out(row)
 
 
+@router.get("/{product_id}", response_model=ProductOut)
+def get_product(
+    product_id: int,
+    queries: SqlBuyerQueries = Depends(get_buyer_queries),
+):
+    row = queries.get_product_with_counts(product_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"产品 {product_id} 不存在")
+    return product_row_to_out(row)
+
+
 @router.get("/{product_id}/buyers", response_model=BuyerListOut)
 def list_buyers(
     product_id: int,

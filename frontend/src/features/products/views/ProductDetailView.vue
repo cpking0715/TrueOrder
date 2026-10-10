@@ -27,6 +27,13 @@ const audience = ref("importer");
 const result = ref<BuyerList | null>(null);
 const loading = ref(false);
 const selectedCompanyId = ref<number | null>(null);
+
+// 联系人导出与买家导出共用同一筛选参数：取 buyers 导出 URL 的查询串换成 contacts 路径
+const contactsExportUrl = computed(() => {
+  const url = filters.exportUrl.value;
+  const search = url.includes("?") ? url.slice(url.indexOf("?")) : "";
+  return `/api/products/${route.params.id}/contacts/export.csv${search}`;
+});
 const error = ref("");
 
 const product = computed(
@@ -187,6 +194,15 @@ watch(
         title="导出当前筛选的全部结果（不受列表显示条数限制）"
       >
         导出当前筛选 CSV（全部）
+      </a>
+      <a
+        class="btn"
+        :href="contactsExportUrl"
+        download
+        data-testid="export-contacts-button"
+        title="按当前筛选导出联系人（默认排除不再联系与无效邮箱）"
+      >
+        导出联系人 CSV
       </a>
     </p>
   </div>

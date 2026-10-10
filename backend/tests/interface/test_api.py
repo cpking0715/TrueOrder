@@ -448,3 +448,18 @@ class Test建产品409与并发:
         assert again.json()["detail"]["product_id"] == first.json()["product_id"]
 
 
+
+
+class Test产品详情:
+    def test_产品详情返回单产品带计数(self, client):
+        seed_via_api(client)
+        r = client.get("/api/products/1")
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["product_id"] == 1
+        assert body["code"] == "P-GARMENT"
+        assert body["counts"]["precise"] >= 1
+        assert any(h["hs_code"] == "620462" for h in body["hs_codes"])
+
+    def test_产品不存在404(self, client):
+        assert client.get("/api/products/99999").status_code == 404

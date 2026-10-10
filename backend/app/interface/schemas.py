@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel
@@ -119,6 +119,8 @@ class CompanyOut(BaseModel):
     city: str
     address: str
     same_name_conflict: bool
+    website: str | None = None
+    website_confirmed: bool = False
 
 
 class CompanyDetailOut(BaseModel):
@@ -126,3 +128,51 @@ class CompanyDetailOut(BaseModel):
     scores: list[CompanyScoreOut]
     bills: list[CompanyBillOut]
     bills_truncated: bool = False
+
+
+class ContactCreateIn(BaseModel):
+    name: str | None = None
+    title: str = ""
+    email: str | None = None
+    phone: str | None = None
+
+
+class ContactUpdateIn(BaseModel):
+    name: str | None = None
+    title: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    do_not_contact: bool | None = None
+
+
+class ContactOut(BaseModel):
+    contact_id: int
+    company_id: int
+    name: str | None
+    title: str
+    email: str | None
+    phone: str | None
+    is_generic: bool
+    source: str
+    source_ref: str
+    acquired_at: datetime
+    verify_status: str
+    do_not_contact: bool
+
+
+class CompanyPatchIn(BaseModel):
+    website: str | None = None
+    website_confirmed: bool | None = None
+
+
+class CompanyWebsiteOut(BaseModel):
+    company_id: int
+    website: str | None
+    website_confirmed: bool
+
+
+class ContactsImportOut(BaseModel):
+    added: int
+    duplicates: int
+    company_not_found: list[str]
+    invalid_rows: list[str]

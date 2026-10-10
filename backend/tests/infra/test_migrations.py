@@ -102,21 +102,33 @@ class Test迁移:
             engine.dispose()
         assert diff == [], f"迁移与 ORM 元数据漂移: {diff}"
 
-    def test_create_all旧库stamp后可接管(self, mig_db):
-        """create_all 时代的库：stamp head 后再 upgrade 不报错、表不重建。"""
+    def test_wp0时代旧库stamp后可接管并补齐增量(self, mig_db):
+        """create_all 时代（WP0 之前）的库：stamp 基线后 upgrade 补齐 contacts 与官网列。"""
         from app.infrastructure.orm import Base
 
         engine = create_engine(MIG_URL)
         Base.metadata.create_all(engine)
+        with engine.begin() as conn:  # 剥掉 WP1 新增对象 = 模拟历史版本的库
+            conn.execute(text("DROP TABLE contacts"))
+            conn.execute(text("ALTER TABLE companies DROP COLUMN website"))
+            conn.execute(text("ALTER TABLE companies DROP COLUMN website_confirmed"))
         engine.dispose()
-        command.stamp(_cfg(), "head")
-        command.upgrade(_cfg(), "head")  # 已在 head，幂等
+        from app.bootstrap import _ensure_schema
+
+        _ensure_schema(MIG_URL)
         engine = create_engine(MIG_URL)
         try:
-            tables = set(inspect(engine).get_table_names())
+            inspector = inspect(engine)
+            tables = set(inspector.get_table_names())
+            has_website = any(
+                c["name"] == "website"
+                for c in inspector.get_columns("companies")
+            )
         finally:
             engine.dispose()
         assert BUSINESS_TABLES <= tables
+        assert "contacts" in tables, "旧库升级后应补齐 contacts 表"
+        assert has_website, "旧库升级后应补齐 companies.website 列"
 
 
 class Test旧库接管:
@@ -128,6 +140,10 @@ class Test旧库接管:
         engine = create_engine(MIG_URL)
         Base.metadata.create_all(engine)
         with engine.begin() as conn:
+            # 剥掉 WP1 新增对象与表达式索引 = 模拟迁移前的历史库
+            conn.execute(text("DROP TABLE contacts"))
+            conn.execute(text("ALTER TABLE companies DROP COLUMN website"))
+            conn.execute(text("ALTER TABLE companies DROP COLUMN website_confirmed"))
             conn.execute(text("DROP INDEX IF EXISTS ix_raw_bills_hs4_arrival"))
         engine.dispose()
 

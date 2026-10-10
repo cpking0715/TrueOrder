@@ -2,8 +2,10 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { fetchCompany, type CompanyDetail } from "@/api/products";
 import BillTable from "./BillTable.vue";
-import ReasonList from "./ReasonList.vue";
-import ScoreSummary from "./ScoreSummary.vue";
+import CompanySummary from "./CompanySummary.vue";
+import ContactsPanel from "./ContactsPanel.vue";
+import WebsiteField from "./WebsiteField.vue";
+import ScoreSection from "./ScoreSection.vue";
 
 const props = defineProps<{
   companyId: number | null;
@@ -26,12 +28,6 @@ const score = computed(() => {
     ?? detail.value.scores[0]
     ?? null;
 });
-
-const tierLabel: Record<string, string> = {
-  precise: "精准客户",
-  potential: "潜在客户",
-  excluded: "已排除",
-};
 
 // Esc 关抽屉：窗口级监听，随抽屉开关挂/卸
 function onKeydown(e: KeyboardEvent) {
@@ -109,44 +105,23 @@ async function locateBill(billId: number) {
         加载失败：{{ error }}
       </div>
       <template v-else-if="detail">
-        <h2>
-          {{ detail.company.name }}
-          <span
-            v-if="score"
-            :class="['badge', score.tier]"
-          >{{ tierLabel[score.tier] }}</span>
-        </h2>
-        <p class="muted small">
-          {{ detail.company.country }}<span v-if="detail.company.city"> · {{ detail.company.city }}</span>
-          · 规范名：{{ detail.company.normalized_name }}
-        </p>
-        <p
-          v-if="detail.company.same_name_conflict"
-          class="badge conflict"
-        >
-          同名冲突：不同城市线索出现同一名称，未自动合并
-        </p>
-        <p
-          v-if="detail.company.address"
-          class="muted small"
-        >
-          {{ detail.company.address }}
-        </p>
+        <CompanySummary
+          :company="detail.company"
+          :tier="score?.tier ?? null"
+        />
 
-        <template v-if="score">
-          <ScoreSummary :score="score" />
-          <h2>得分理由</h2>
-          <ReasonList
-            :reasons="score.reasons"
-            @locate="locateBill"
-          />
-          <p
-            v-if="score.suppliers.length"
-            class="small muted"
-          >
-            供货方：{{ score.suppliers.join("；") }}
-          </p>
-        </template>
+        <WebsiteField
+          :company-id="detail.company.company_id"
+          :website="detail.company.website"
+          :confirmed="detail.company.website_confirmed"
+        />
+        <ContactsPanel :company-id="detail.company.company_id" />
+
+        <ScoreSection
+          v-if="score"
+          :score="score"
+          @locate="locateBill"
+        />
 
         <h2 style="margin-top: 16px">
           提单（最近 500 票内）

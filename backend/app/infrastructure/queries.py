@@ -177,6 +177,31 @@ class SqlBuyerQueries:
                 )
         return list(by_id.values())
 
+    def get_product_with_counts(self, product_id: int) -> dict | None:
+        """单产品详情（含 tier 计数与税号列表），不拉全表。"""
+        product = self._session.get(ProductORM, product_id)
+        if product is None:
+            return None
+        hs_rows = self._session.scalars(
+            select(ProductHsCodeORM)
+            .where(ProductHsCodeORM.product_id == product_id)
+            .order_by(ProductHsCodeORM.id)
+        ).all()
+        by_audience = self.product_tier_counts().get(product_id, {})
+        return {
+            "product_id": product.id,
+            "code": product.code,
+            "name": product.name,
+            "description": product.description,
+            "buyer_type": product.buyer_type,
+            "hs_codes": [
+                {"hs_code": r.hs_code, "audience": r.audience, "note": r.note or ""}
+                for r in hs_rows
+            ],
+            "counts": self._summed_counts(by_audience),
+            "counts_by_audience": by_audience,
+        }
+
     def get_product_buyer_type(self, product_id: int) -> str | None:
         """单产品查询买家类型（默认受众用，不拉全部产品列表）。"""
         return self._session.scalar(
@@ -203,6 +228,8 @@ class SqlBuyerQueries:
                 "city": company.city_guess or "",
                 "address": company.address_guess or "",
                 "same_name_conflict": bool(company.same_name_conflict),
+                "website": company.website,
+                "website_confirmed": bool(company.website_confirmed),
             }
         )
 

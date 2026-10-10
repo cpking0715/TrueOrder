@@ -179,7 +179,10 @@ class Test排除规则:
             bills=(bill(73, date(2026, 3, 1)),),
         )
         result = score_company(GARMENT_PRODUCT, "importer", facts, AS_OF)
+        assert result.tier == "excluded"
         assert result.exclusion_code == "EX_BANK"
+        bank_reason = [r for r in result.reasons if r.code == "EX_BANK"][0]
+        assert bank_reason.bill_ids == (73,)
 
     def test_货代被排除(self):
         facts = company(
@@ -187,7 +190,10 @@ class Test排除规则:
             bills=(bill(74, date(2026, 3, 1)),),
         )
         result = score_company(GARMENT_PRODUCT, "importer", facts, AS_OF)
+        assert result.tier == "excluded"
         assert result.exclusion_code == "EX_FORWARDER"
+        fwd_reason = [r for r in result.reasons if r.code == "EX_FORWARDER"][0]
+        assert fwd_reason.bill_ids == (74,)
 
     def test_名称仅含CARGO不视为货代(self):
         # F6 回归：CARGO 一词过宽（如 CARGO BRANDS 是服装品牌常用词），不单独触发
@@ -210,6 +216,8 @@ class Test排除规则:
         result = score_company(GARMENT_PRODUCT, "importer", facts, AS_OF)
         assert result.tier == "excluded"
         assert result.exclusion_code == "EX_RELATED_PARTY"
+        related_reason = [r for r in result.reasons if r.code == "EX_RELATED_PARTY"][0]
+        assert set(related_reason.bill_ids) == {81, 82}
 
     def test_集团内部票被忽略但外部票保留(self):
         facts = company(

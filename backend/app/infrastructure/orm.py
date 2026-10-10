@@ -10,6 +10,7 @@ from datetime import date, datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Computed,
     Date,
     DateTime,
@@ -88,6 +89,9 @@ class CompanyORM(Base):
         TSVECTOR(),
         Computed("to_tsvector('simple', coalesce(search_text, ''))", persisted=True),
     )
+    # 官网（WP1）：来源与置信度两列随 WP4 补全功能一起迁移
+    website: Mapped[str | None] = mapped_column(Text, nullable=True)
+    website_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -156,3 +160,43 @@ class CompanyScoreORM(Base):
     computed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class ContactORM(Base):
+    """联系人（WP1）：来源可追溯，同公司同邮箱唯一（部分唯一索引），无邮箱可多条。"""
+
+    __tablename__ = "contacts"
+    __table_args__ = (
+        # UNIQUE (company_id, lower(email)) WHERE email IS NOT NULL
+        Index(
+            "uq_contacts_company_email",
+            "company_id",
+            text("lower(email)"),
+            unique=True,
+            postgresql_where=text("email IS NOT NULL"),
+        ),
+        CheckConstraint(
+            "source IN ('manual','csv','finder','website')", name="ck_contacts_source"
+        ),
+        CheckConstraint(
+            "verify_status IN ('unknown','valid','invalid','bounced')",
+            name="ck_contacts_verify_status",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_id: Mapped[int] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    title: Mapped[str] = mapped_column(Text, default="")
+    email: Mapped[str | None] = mapped_column(Text, nullable=True)
+    phone: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_generic: Mapped[bool] = mapped_column(Boolean, default=False)
+    source: Mapped[str] = mapped_column(String(16), default="manual")
+    source_ref: Mapped[str] = mapped_column(Text, default="")
+    acquired_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    verify_status: Mapped[str] = mapped_column(String(16), default="unknown")
+    do_not_contact: Mapped[bool] = mapped_column(Boolean, default=False)

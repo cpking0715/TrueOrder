@@ -74,3 +74,81 @@ def test_gin索引存在(session):
     sql = "SELECT indexname FROM pg_indexes WHERE tablename='companies'"
     indexes = session.execute(text(sql)).scalars()
     assert "ix_companies_search_vector" in set(indexes)
+
+
+class Test联系人表约束:
+    def _company(self, session, name="ACME TRADING"):
+        from sqlalchemy import select
+
+        from app.infrastructure.orm import CompanyORM
+
+        existing = session.scalar(
+            select(CompanyORM).where(CompanyORM.normalized_name == name)
+        )
+        if existing:
+            return existing.id
+        from app.infrastructure.importers import _refresh_search_text
+
+        company = CompanyORM(normalized_name=name, country="US", name_variants=[name])
+        _refresh_search_text(company)
+        session.add(company)
+        session.flush()
+        return company.id
+
+    def test_同公司同邮箱大小写不同也冲突(self, session):
+        import pytest
+        from sqlalchemy.exc import IntegrityError
+
+        from app.infrastructure.orm import ContactORM
+
+        company_id = self._company(session)
+        session.add(ContactORM(company_id=company_id, email="a@b.com", source="manual"))
+        session.flush()
+        session.add(ContactORM(company_id=company_id, email="A@B.COM", source="csv"))
+        with pytest.raises(IntegrityError):
+            session.flush()
+        session.rollback()
+
+    def test_无邮箱联系人不参与唯一约束(self, session):
+        from app.infrastructure.orm import ContactORM
+
+        company_id = self._company(session)
+        session.add(ContactORM(company_id=company_id, email=None, name="电话联系人甲"))
+        session.add(ContactORM(company_id=company_id, email=None, name="电话联系人乙"))
+        session.flush()
+        assert session.query(ContactORM).filter_by(company_id=company_id).count() == 2
+
+    def test_不同公司同邮箱不冲突(self, session):
+        from app.infrastructure.orm import ContactORM
+
+        a = self._company(session, "AAA TRADING")
+        b = self._company(session, "BBB TRADING")
+        session.add(ContactORM(company_id=a, email="shared@b.com"))
+        session.add(ContactORM(company_id=b, email="shared@b.com"))
+        session.flush()
+
+    def test_坏source被CHECK拒绝(self, session):
+        import pytest
+        from sqlalchemy.exc import IntegrityError
+
+        from app.infrastructure.orm import ContactORM
+
+        company_id = self._company(session)
+        session.add(ContactORM(company_id=company_id, email="x@y.com", source="scraped"))
+        with pytest.raises(IntegrityError):
+            session.flush()
+        session.rollback()
+
+    def test_删公司级联删联系人(self, session):
+        from app.infrastructure.orm import CompanyORM, ContactORM
+
+        company_id = self._company(session, "CASCADE TRADING")
+        session.add(ContactORM(company_id=company_id, email="c@d.com"))
+        session.flush()
+        session.execute(
+            CompanyORM.__table__.delete().where(CompanyORM.id == company_id)
+        )
+        session.flush()
+        assert (
+            session.query(ContactORM).filter_by(company_id=company_id).count() == 0
+        )

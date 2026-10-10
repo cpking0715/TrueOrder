@@ -9,6 +9,7 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.infrastructure.contact_repository import SqlContactRepository
 from app.infrastructure.db import make_engine, make_session_factory
 from app.infrastructure.importers import CsvImporter
 from app.infrastructure.queries import SqlBuyerQueries
@@ -39,3 +40,7 @@ def get_importer(session: Session = Depends(get_session)) -> CsvImporter:
 
 def get_product_repository(session: Session = Depends(get_session)) -> SqlProductRepository:
     return SqlProductRepository(session)
+
+
+def get_contact_repository(session: Session = Depends(get_session)) -> SqlContactRepository:
+    return SqlContactRepository(session)

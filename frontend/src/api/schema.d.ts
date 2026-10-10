@@ -59,6 +59,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/products/{product_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Product */
+        get: operations["get_product_api_products__product_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/products/{product_id}/buyers": {
         parameters: {
             query?: never;
@@ -153,6 +170,89 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
+        /** Patch Company */
+        patch: operations["patch_company_api_companies__company_id__patch"];
+        trace?: never;
+    };
+    "/api/companies/{company_id}/contacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Contacts */
+        get: operations["list_contacts_api_companies__company_id__contacts_get"];
+        put?: never;
+        /** Add Contact */
+        post: operations["add_contact_api_companies__company_id__contacts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/contacts/{contact_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Contact
+         * @description 一键清除该联系人全部数据：第一期硬删行（活动表脱敏逻辑随第二期补）。
+         */
+        delete: operations["delete_contact_api_contacts__contact_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Contact */
+        patch: operations["update_contact_api_contacts__contact_id__patch"];
+        trace?: never;
+    };
+    "/api/contacts/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Contacts Csv
+         * @description 联系人 CSV 导入：company_id 或「企业名+国家」定位企业，name/title/email/phone。
+         */
+        post: operations["import_contacts_csv_api_contacts_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/products/{product_id}/contacts/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Contacts
+         * @description 按买家列表同一组筛选导出联系人（每联系人一行）。
+         *
+         *     默认排除 do_not_contact 与 verify_status in (invalid, bounced)；
+         *     include_invalid=true 放开。官网置信度列待 WP4 补全功能落地后填值。
+         */
+        get: operations["export_contacts_api_products__product_id__contacts_export_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
         patch?: never;
         trace?: never;
     };
@@ -166,6 +266,11 @@ export interface components {
             file: string;
             /** As Of */
             as_of?: string | null;
+        };
+        /** Body_import_contacts_csv_api_contacts_import_post */
+        Body_import_contacts_csv_api_contacts_import_post: {
+            /** File */
+            file: string;
         };
         /** Body_import_products_csv_api_products_import_post */
         Body_import_products_csv_api_products_import_post: {
@@ -274,6 +379,20 @@ export interface components {
             address: string;
             /** Same Name Conflict */
             same_name_conflict: boolean;
+            /** Website */
+            website?: string | null;
+            /**
+             * Website Confirmed
+             * @default false
+             */
+            website_confirmed: boolean;
+        };
+        /** CompanyPatchIn */
+        CompanyPatchIn: {
+            /** Website */
+            website?: string | null;
+            /** Website Confirmed */
+            website_confirmed?: boolean | null;
         };
         /** CompanyScoreOut */
         CompanyScoreOut: {
@@ -296,6 +415,83 @@ export interface components {
             last_arrival?: string | null;
             /** Suppliers */
             suppliers: string[];
+        };
+        /** CompanyWebsiteOut */
+        CompanyWebsiteOut: {
+            /** Company Id */
+            company_id: number;
+            /** Website */
+            website: string | null;
+            /** Website Confirmed */
+            website_confirmed: boolean;
+        };
+        /** ContactCreateIn */
+        ContactCreateIn: {
+            /** Name */
+            name?: string | null;
+            /**
+             * Title
+             * @default
+             */
+            title: string;
+            /** Email */
+            email?: string | null;
+            /** Phone */
+            phone?: string | null;
+        };
+        /** ContactOut */
+        ContactOut: {
+            /** Contact Id */
+            contact_id: number;
+            /** Company Id */
+            company_id: number;
+            /** Name */
+            name: string | null;
+            /** Title */
+            title: string;
+            /** Email */
+            email: string | null;
+            /** Phone */
+            phone: string | null;
+            /** Is Generic */
+            is_generic: boolean;
+            /** Source */
+            source: string;
+            /** Source Ref */
+            source_ref: string;
+            /**
+             * Acquired At
+             * Format: date-time
+             */
+            acquired_at: string;
+            /** Verify Status */
+            verify_status: string;
+            /** Do Not Contact */
+            do_not_contact: boolean;
+        };
+        /** ContactUpdateIn */
+        ContactUpdateIn: {
+            /** Name */
+            name?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Phone */
+            phone?: string | null;
+            /** Do Not Contact */
+            do_not_contact?: boolean | null;
+        };
+        /** ContactsImportOut */
+        ContactsImportOut: {
+            /** Added */
+            added: number;
+            /** Duplicates */
+            duplicates: number;
+            /** Company Not Found */
+            company_not_found: string[];
+            /** Invalid Rows */
+            invalid_rows: string[];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -553,6 +749,37 @@ export interface operations {
             };
         };
     };
+    get_product_api_products__product_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_buyers_api_products__product_id__buyers_get: {
         parameters: {
             query?: {
@@ -718,6 +945,242 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CompanyDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_company_api_companies__company_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompanyPatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyWebsiteOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_contacts_api_companies__company_id__contacts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_contact_api_companies__company_id__contacts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContactCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_contact_api_contacts__contact_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contact_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_contact_api_contacts__contact_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contact_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContactUpdateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_contacts_csv_api_contacts_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_import_contacts_csv_api_contacts_import_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactsImportOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_contacts_api_products__product_id__contacts_export_csv_get: {
+        parameters: {
+            query?: {
+                audience?: string | null;
+                tier?: string | null;
+                q?: string | null;
+                country?: string | null;
+                min_shipments?: number | null;
+                include_invalid?: boolean;
+            };
+            header?: never;
+            path: {
+                product_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

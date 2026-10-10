@@ -83,6 +83,8 @@ const companyFixture: CompanyDetail = {
     country: "US",
     city: "NEW YORK",
     address: "350 FIFTH AVE",
+    website: null,
+    website_confirmed: false,
     same_name_conflict: false,
   },
   scores: [
