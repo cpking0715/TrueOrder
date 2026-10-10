@@ -219,9 +219,7 @@ class Test生产会话语义:
         from app.interface import deps
         from app.interface.main import create_app
 
-        engine_fresh = create_engine(
-            "postgresql+psycopg://trueorder:trueorder@localhost:5433/trueorder_test"
-        )
+        engine_fresh = create_engine(engine.url.render_as_string(hide_password=False))
         Base.metadata.drop_all(engine_fresh)
         Base.metadata.create_all(engine_fresh)
         monkeypatch.setattr(deps, "_session_factory", lambda: sessionmaker(bind=engine_fresh))
@@ -294,3 +292,39 @@ class Test导入与更新的脏写行为:
         ).json()
         assert body["added"] == 0
         assert len(body["invalid_rows"]) == 1 and "国家" in body["invalid_rows"][0]
+
+
+class Test失败路径不提交:
+    def test_409路径不落库_生产式会话(self, engine, monkeypatch):
+        """回归锁：失败请求不得因会话 teardown 而意外提交（响应后提交竞态的镜像用例）。"""
+        from fastapi.testclient import TestClient
+        from sqlalchemy import create_engine, text
+        from sqlalchemy.orm import sessionmaker
+
+        from app.infrastructure.orm import Base
+        from app.interface import deps
+        from app.interface.main import create_app
+
+        engine_fresh = create_engine(engine.url.render_as_string(hide_password=False))
+        Base.metadata.drop_all(engine_fresh)
+        Base.metadata.create_all(engine_fresh)
+        monkeypatch.setattr(deps, "_session_factory", lambda: sessionmaker(bind=engine_fresh))
+        app = create_app()
+        with TestClient(app) as client:
+            _seed(client)
+            precise = client.get("/api/products/1/buyers", params={"tier": "precise"}).json()
+            cid = precise["items"][0]["company_id"]
+            first = client.post(
+                f"/api/companies/{cid}/contacts", json={"email": "race@ex.com"}
+            )
+            assert first.status_code == 201
+            clash = client.post(
+                f"/api/companies/{cid}/contacts", json={"email": "RACE@ex.com"}
+            )
+            assert clash.status_code == 409
+            with engine_fresh.connect() as conn:
+                count = conn.execute(
+                    text("select count(*) from contacts where email = 'race@ex.com'")
+                ).scalar_one()
+        engine_fresh.dispose()
+        assert count == 1, "409 路径不应产生第二条或丢失第一条"

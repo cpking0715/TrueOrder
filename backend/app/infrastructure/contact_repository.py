@@ -138,6 +138,7 @@ class SqlContactRepository:
             # 并发窗口兜底：唯一索引拦下，回滚保持会话可用（预查重已覆盖常规路径）
             self._session.rollback()
             return AddContactResult(None, "duplicate")
+        self._session.commit()  # 响应前落库：客户端拿到 2xx 时数据必须已持久化
         return AddContactResult(_to_row(contact), None)
 
     def _duplicate_exists(
@@ -188,6 +189,7 @@ class SqlContactRepository:
         except IntegrityError:
             self._session.rollback()
             return "duplicate"
+        self._session.commit()
         return _to_row(contact)
 
     def delete(self, contact_id: int) -> bool:
@@ -196,6 +198,7 @@ class SqlContactRepository:
             return False
         self._session.delete(contact)
         self._session.flush()
+        self._session.commit()
         return True
 
     def update_website(
@@ -210,6 +213,7 @@ class SqlContactRepository:
         if confirmed is not None:
             company.website_confirmed = confirmed
         self._session.flush()
+        self._session.commit()
         return company.website, bool(company.website_confirmed)
 
     # ---------- CSV 导入 ----------
