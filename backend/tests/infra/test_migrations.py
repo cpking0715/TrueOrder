@@ -85,18 +85,22 @@ class Test迁移:
         assert version
         assert BUSINESS_UNIQUE <= _business_unique_constraints()
 
-    def test_迁移后ORM建表为空操作(self, mig_db):
-        """迁移建的 schema 与 ORM 元数据一致：create_all 不产生新表。"""
+    def test_迁移schema与ORM元数据一致(self, mig_db):
+        """升级后的 schema 与 ORM 元数据全量比对（表/列/索引/约束），无漂移。"""
+        from alembic.autogenerate import compare_metadata
+        from alembic.runtime.migration import MigrationContext
+
         from app.infrastructure.orm import Base
 
         command.upgrade(_cfg(), "head")
         engine = create_engine(MIG_URL)
         try:
-            Base.metadata.create_all(engine)  # 已存在的表会被跳过
-            after = set(inspect(engine).get_table_names())
+            with engine.connect() as conn:
+                ctx = MigrationContext.configure(conn)
+                diff = compare_metadata(ctx, Base.metadata)
         finally:
             engine.dispose()
-        assert after == BUSINESS_TABLES | {"alembic_version"}
+        assert diff == [], f"迁移与 ORM 元数据漂移: {diff}"
 
     def test_create_all旧库stamp后可接管(self, mig_db):
         """create_all 时代的库：stamp head 后再 upgrade 不报错、表不重建。"""
@@ -113,3 +117,31 @@ class Test迁移:
         finally:
             engine.dispose()
         assert BUSINESS_TABLES <= tables
+
+
+class Test旧库接管:
+    def test_create_all旧库经ensure_schema补齐增量索引(self, mig_db):
+        """迁移前旧库（无增量索引）经 bootstrap._ensure_schema 接管后必须补上索引。"""
+        from app.bootstrap import _ensure_schema
+        from app.infrastructure.orm import Base
+
+        engine = create_engine(MIG_URL)
+        Base.metadata.create_all(engine)
+        with engine.begin() as conn:
+            conn.execute(text("DROP INDEX IF EXISTS ix_raw_bills_hs4_arrival"))
+        engine.dispose()
+
+        _ensure_schema(MIG_URL)
+
+        engine = create_engine(MIG_URL)
+        try:
+            with engine.connect() as conn:
+                has_index = conn.execute(
+                    text(
+                        "select 1 from pg_indexes "
+                        "where indexname = 'ix_raw_bills_hs4_arrival'"
+                    )
+                ).scalar()
+        finally:
+            engine.dispose()
+        assert has_index, "旧库被 stamp 到 head 后增量索引缺失"

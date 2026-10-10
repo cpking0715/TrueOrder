@@ -32,3 +32,6 @@ frontend/tsconfig.tsbuildinfo
 
 # 性能基准生成的合成数据（工具 gen_bills.py 产物，不入库）
 backend/tests/perf/bills_*.csv
+
+# ZCode 工作区索引配置（本地环境产物）
+.zcodeignore

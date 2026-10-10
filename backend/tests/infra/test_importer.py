@@ -225,3 +225,25 @@ class TestP1缺陷修复:
             assert summary.duplicate_bills == 13
         finally:
             CsvImporter.HASH_QUERY_BATCH = 50000
+
+
+class Test导入缓存覆盖既有公司:
+    def test_库中既有公司在批内也被缓存(self, session, monkeypatch):
+        """二次导入（新提单+既有公司）：公司查询次数 = 公司数而非行数×2。"""
+        importer = CsvImporter(session)
+        importer.import_bills(BILLS_CSV, rescore=False)
+        session.commit()
+
+        calls = {"n": 0}
+        orig_scalar = session.scalar
+
+        def counting_scalar(*args, **kwargs):
+            calls["n"] += 1
+            return orig_scalar(*args, **kwargs)
+
+        monkeypatch.setattr(session, "scalar", counting_scalar)
+        more = BILLS_CSV.replace("BOL-001", "BOL-901").replace("BOL-002", "BOL-902")
+        summary, _ = importer.import_bills(more, rescore=False)
+        assert summary.inserted_bills == 2
+        # 两行共享 1 家收货人 + 1 家供货人：缓存生效则各 miss 一次，共 2 次
+        assert calls["n"] <= 2, f"既有公司未走缓存，scalar 查询 {calls['n']} 次"

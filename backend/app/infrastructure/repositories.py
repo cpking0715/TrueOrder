@@ -112,9 +112,10 @@ class SqlProductRepository:
             if error or product is None:
                 return 0, error
             try:
-                return self.upsert_product(product), None
+                # SAVEPOINT：撞号只回滚本次插入，不波及外层事务里其他未提交改动
+                with self._session.begin_nested():
+                    return self.upsert_product(product), None
             except IntegrityError:
-                self._session.rollback()
                 if attempt == 2:
                     return 0, "产品编码冲突，请重试"
         return 0, "unreachable"

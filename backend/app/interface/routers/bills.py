@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
 
 from app.core.config import Settings, get_settings
 from app.infrastructure.importers import CsvImporter
@@ -19,13 +19,20 @@ router = APIRouter(prefix="/api", tags=["bills", "companies"])
 @router.post("/bills/import", response_model=ImportSummaryOut)
 async def import_bills_csv(
     file: UploadFile,
+    request: Request,
     as_of: date | None = Form(default=None),
     importer: CsvImporter = Depends(get_importer),
     settings: Settings = Depends(get_settings),
 ):
     """提单 CSV 导入：企业归并 + 去重 + 自动重打分。as_of 缺省用今天。"""
+    limit = settings.max_upload_mb * 1024 * 1024
+    declared = request.headers.get("content-length")
+    if declared is not None and int(declared) > limit:
+        raise HTTPException(
+            status_code=413, detail=f"文件超过上传上限 {settings.max_upload_mb} MB"
+        )
     data = await file.read()
-    if len(data) > settings.max_upload_mb * 1024 * 1024:
+    if len(data) > limit:
         raise HTTPException(
             status_code=413, detail=f"文件超过上传上限 {settings.max_upload_mb} MB"
         )

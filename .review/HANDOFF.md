@@ -168,3 +168,61 @@ uv run uvicorn app.interface.main:app --port 8000
 | F3' 指纹变更缺升级告警/文档 | P2 | 成立 | README「数据导入」节写明升级步骤：已有库升级后须 `--drop` 重建重导，不要旧库追加导入。（导入时自动检测指纹版本属过度工程，文档化即可） |
 
 处理后复跑：后端 `uv run pytest -q` 121 通过、ruff 0 错；前端 `pnpm test` 18 通过、ESLint 0 错。
+
+---
+
+# Handoff — TrueOrder WP0 地基与边界（DEV-SPEC 4.1–4.4，2026-10-10）
+
+## 任务
+
+按 `docs/DEV-SPEC.md`（v0.2）实施 WP0：七项 P1 缺陷修复、Alembic 迁移体系、性能评估与必要的性能修复、约束文档修订、smoke 冒烟与 CI。第一期范围（WP1/WP3/WP4/WP7）不在本轮。
+
+## 已实现
+
+1. **4.1 缺陷修复**（每项先写失败测试再修）：
+   - 同文件重复行：`import_bills` 循环内把新插入的 `bill_hash` 加入已见集合，重复行计 `duplicate_bills` 不再炸 UNIQUE。
+   - CSV 公式注入：新增 `interface/csv_safety.py::sanitize_csv_cell`（`= + - @` 及 \t\r\n 前缀加 `'`），导出全列接入。
+   - 上传上限：`Settings.max_upload_mb`（默认 20），产品/提单导入端点超限 413。
+   - 建产品只打分新产品：`CsvImporter.rescore_one`，`create_product` 改用它；既有产品得分行 id/computed_at 不变（接口测试锁定）。
+   - 并发建产品：`SqlProductRepository.create_quick`（撞号回滚换号重试×3）+ `find_quick_duplicate`（同名同税号同受众 409 带既有 id）。并发测试在 infra 层双线程双 Session 真并发。
+   - 打分窗口：`BuyerPoolReader.load_pool(families, as_of)` 端口签名变更，SQL 侧 `arrival_date >= months_before(as_of,24)`，窗外提单不进候选。
+   - 杂项：`product_row_to_out` 下沉 mapping；`get_product_buyer_type` 单产品查询；抽屉 `bills_truncated`（fetch limit+1）；导出改真流式 generator。
+2. **4.2 迁移**：Alembic 接入（`backend/alembic/`），基线迁移（5 表+约束+生成列）+ 表达式索引迁移；`bootstrap` 改 `upgrade head`，create_all 旧库自动 stamp；删空包 `backend/src/`，pyproject 去 scripts/build-system。
+3. **4.4 性能**：`tests/perf/gen_bills.py` + `bench.py`，10万/50万/100万三档实测入 `docs/perf.md`。评估中发现并修复两个真缺陷：大 CSV 查重超 PG 65535 参数上限（分批 5 万）；导入逐行公司查询 20 万次往返（批内公司缓存，186s→36s，缓存命中仍走变体更新分支）。100 万行打分 49s 超 30s 目标，已记录优化路径不提前优化。
+4. **4.3 文档与 CI**：AGENTS.md 约束修订（受控开发信/补全、官网抓取规则、TRUEORDER_ 前缀、必测点补本轮切片）；README 同步；`docs/OUTREACH-COMPLIANCE.md`（第一期部分）；`tests/smoke/` 2 例（补上 smoke 0 用例缺口）；`.github/workflows/ci.yml`（backend/frontend/schema 一致性三 job）。
+
+## Diff 基线
+
+base=1351d68  head=7266ca6
+审阅范围命令：git diff 1351d68...7266ca6
+
+## 改动文件
+
+后端核心：`infrastructure/{importers,repositories,queries,orm}.py`、`domain/{ports,services}.py`、`interface/routers/{products,bills}.py`、`interface/{mapping,schemas,csv_safety}.py`、`core/config.py`、`bootstrap.py`、`alembic/`（2 迁移）。
+测试：`tests/infra/{test_importer,test_queries,test_migrations}.py`、`tests/interface/{test_api,test_csv_safety}.py`、`tests/smoke/`、`tests/perf/`。
+文档与 CI：`AGENTS.md`、`README.md`、`docs/{perf.md,OUTREACH-COMPLIANCE.md}`、`.github/workflows/ci.yml`、`frontend/src/api/schema.d.ts`（重新生成）+1 测试 mock 补字段。
+
+## 测试
+
+- `uv run pytest -q` → **151 passed**（基线 135 → +16 新用例）
+- `uv run pytest -q -m smoke` → **2 passed, 151 deselected**
+- `uv run ruff check .` → All checks passed
+- `pnpm test` → **25 passed**；`pnpm exec eslint .` / `vue-tsc --noEmit` → 通过
+- `uv run python -m app.bootstrap` 实跑：旧库 stamp → head → 种子幂等（重复 26 票）
+- 性能：10万/50万/100万三档 bench 实跑，数据在 `docs/perf.md`
+
+## 已知假设与未验证项
+
+- **CI 未实跑**（本地无 GitHub Actions 环境）：workflow 语法经人工核对，`uv sync --locked`/`gen:api`/`git diff --exit-code` 三步已在本地实跑验证等价命令。
+- 100 万行打分 49s 超 DEV-SPEC 目标 30s：按规格「不提前优化」处理，优化路径已写入 perf.md（聚合下推 SQL 或分批装载）。
+- `.zcodeignore`（未跟踪）是 ZCode 工作区索引配置，有意不提交、不删除，由用户决定去留。
+- 打分窗口 24 个月：窗外提单的公司完全退出候选（含 excluded 也不出现）——这是规格 4.1.6 的字面要求，行为变化已被新测试锁定；如需「窗外仅退出精准、仍显示历史」需另立需求。
+
+## Review 焦点
+
+1. **导入缓存的并发与语义**：`_upsert_company` 的批内缓存（`importers.py`）在 variant 新增路径上是否与无缓存版行为完全等价（同名不同写法、同名冲突重算）。
+2. **打分窗口端口变更**：`load_pool(families, as_of)` 语义是否会误伤既有调用方；窗口边界（正好 24 个月）的含闭区间判断。
+3. **并发重试**：`create_quick` 的 rollback 时机是否会把同事务内的其他未提交改动一并回滚（create_product 端点里 upsert 前无其他写，但请独立核查）。
+4. **公式注入**：转义前缀集合是否够（`= + - @ \t \r \n`）；`sanitize_csv_cell` 对非字符串（date/int）的处理。
+5. **迁移一致性测试**的强度：`test_迁移后ORM建表为空操作` 只比表集合，不比列/索引/约束级差异，是否可接受。
+6. CI workflow 的 PG 服务与 conftest 建库权限（POSTGRES_USER 即 superuser）假设。

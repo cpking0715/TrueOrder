@@ -57,8 +57,8 @@ class CsvImporter:
         summary = ImportSummary()
         rescores: list[RescoreSummary] = []
         lines: list[tuple[BillLine, int]] = []
-        # 批内公司缓存：同文件重复公司不再逐行查库（导入 10 万行的性能关键路径）
-        company_cache: dict[str, CompanyORM | None] = {}
+        # 批内公司缓存：同文件重复公司（新建或既有）不再逐行查库（导入性能关键路径）
+        company_cache: dict[str, CompanyORM] = {}
         for row_no, row in enumerate(csv.DictReader(io.StringIO(csv_text)), start=2):
             line, err = parse_bill_row(row, source_ref, row_no)
             if err or line is None:
@@ -138,7 +138,7 @@ class CsvImporter:
         address: str,
         raw_country: str,
         summary: ImportSummary,
-        company_cache: dict[str, CompanyORM | None] | None = None,
+        company_cache: dict[str, CompanyORM] | None = None,
     ) -> int | None:
         normalized = normalize_company_name(raw_name)
         if not normalized:
@@ -186,6 +186,8 @@ class CsvImporter:
             existing.same_name_conflict = name_conflict(pairs)
             _refresh_search_text(existing)
             summary.companies_updated += 1
+        if company_cache is not None:
+            company_cache[cache_key] = existing
         return existing.id
 
     def rescore(self, as_of: date) -> list[RescoreSummary]:

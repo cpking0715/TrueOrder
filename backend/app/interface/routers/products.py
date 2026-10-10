@@ -7,7 +7,7 @@ import io
 from collections.abc import Iterator
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse
 
 from app.core.config import Settings, get_settings
@@ -190,12 +190,19 @@ def export_buyers(
 @router.post("/import", response_model=ImportSummaryOut)
 async def import_products_csv(
     file: UploadFile,
+    request: Request,
     importer: CsvImporter = Depends(get_importer),
     settings: Settings = Depends(get_settings),
 ):
     """产品目录 CSV 导入：每行一个产品 + 税号 + 买家类型，多行税号自动合并。"""
+    limit = settings.max_upload_mb * 1024 * 1024
+    declared = request.headers.get("content-length")
+    if declared is not None and int(declared) > limit:
+        raise HTTPException(
+            status_code=413, detail=f"文件超过上传上限 {settings.max_upload_mb} MB"
+        )
     data = await file.read()
-    if len(data) > settings.max_upload_mb * 1024 * 1024:
+    if len(data) > limit:
         raise HTTPException(
             status_code=413, detail=f"文件超过上传上限 {settings.max_upload_mb} MB"
         )

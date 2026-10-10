@@ -34,7 +34,7 @@ def _alembic_config(database_url: str) -> AlembicConfig:
 
 
 def _ensure_schema(database_url: str) -> None:
-    """建表走 Alembic；create_all 时代的旧库直接 stamp 到 head，不重复建。"""
+    """建表走 Alembic；create_all 时代的旧库先 stamp 到基线再 upgrade，增量迁移照常执行。"""
     engine = make_engine(database_url)
     inspector = inspect(engine)
     has_tables = inspector.has_table("companies")
@@ -42,10 +42,10 @@ def _ensure_schema(database_url: str) -> None:
     engine.dispose()
     cfg = _alembic_config(database_url)
     if has_tables and not has_alembic:
-        command.stamp(cfg, "head")
-        print("检测到迁移前旧库，已标记为 head")
-    else:
-        command.upgrade(cfg, "head")
+        # 只标记「基线已建」：后续迁移（索引等）必须真实执行，不能直接跳到 head
+        command.stamp(cfg, "df993f8cbfd2")
+        print("检测到迁移前旧库，已标记基线，将执行增量迁移")
+    command.upgrade(cfg, "head")
     print("schema 已就绪（alembic head）")
 
 
