@@ -40,10 +40,15 @@ const product = computed(
   () => products.value.find((p) => p.product_id === productId.value) ?? null,
 );
 
-// F5：both 产品的页签计数用当前受众的细分数据；单受众产品退回总计数
+// F5：both 产品的页签计数用当前受众的细分数据。
+// counts_by_audience 只对有得分行的受众建键：both 某受众缺键 = 该受众无得分（{}），
+// 严禁回退总计数，否则空受众页签会串成另一受众的数字（F1 复审）。
 const audienceCounts = computed(() => {
   const current = product.value;
   if (!current) return {};
+  if (current.buyer_type === "both") {
+    return current.counts_by_audience?.[audience.value] ?? {};
+  }
   return current.counts_by_audience?.[audience.value] ?? current.counts;
 });
 

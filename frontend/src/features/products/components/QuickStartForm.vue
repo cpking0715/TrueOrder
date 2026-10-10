@@ -41,7 +41,9 @@ async function submit() {
     error.value = "请填写产品名称";
     return;
   }
-  if (!/^\d{6,10}$/.test(hsCode.value.trim()) || /^0+$/.test(hsCode.value.trim())) {
+  const hs = hsCode.value.trim();
+  // 与后端 is_valid_hs 对齐：6-10 位纯数字，且前 6 位不得全零（0000001 也是误码）
+  if (!/^\d{6,10}$/.test(hs) || hs.slice(0, 6) === "000000") {
     error.value = "税号需为 6-10 位数字（不能全零），如 620462";
     return;
   }

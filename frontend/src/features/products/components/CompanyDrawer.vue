@@ -35,9 +35,13 @@ function onKeydown(e: KeyboardEvent) {
 }
 onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 
+// 关闭后/切换公司在途的旧响应不允许写入（与买家列表的 requestSeq 同口径）
+let requestSeq = 0;
+
 watch(
   () => [props.companyId, props.productId, props.audience] as const,
   async ([id]) => {
+    const seq = ++requestSeq;
     window.removeEventListener("keydown", onKeydown);
     if (id == null) {
       detail.value = null;
@@ -47,11 +51,16 @@ watch(
     loading.value = true;
     error.value = "";
     try {
-      detail.value = await fetchCompany(id, props.productId, props.audience);
+      const data = await fetchCompany(id, props.productId, props.audience);
+      if (seq !== requestSeq) return;
+      detail.value = data;
     } catch (e) {
+      if (seq !== requestSeq) return;
       error.value = (e as Error).message;
     } finally {
-      loading.value = false;
+      if (seq === requestSeq) {
+        loading.value = false;
+      }
     }
   },
   { immediate: true },

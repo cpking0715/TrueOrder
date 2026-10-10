@@ -363,3 +363,21 @@ verdict：**F1-F4 全部 verified**（复审通过读 fastapi 0.143 源码确认
 | import_csv 逐行 commit 后失去原子性，尾部 commit 多余 | 移除多余 commit；**行级提交（非原子）为已知行为**：中途失败留已提交前半批；导入常规路径无异常抛出（校验/查重前置），实际风险≈0，若未来需要原子导入再给 add 加 commit 开关 |
 
 **WP1 关闭状态（47b14d8）**：190 passed + smoke 2 + ruff 干净 + 前端 30。审阅四轮（初审 5 条→修复→复审 3 条→修复→终审 verified），收敛。
+
+## 独立审阅轮（ZCode 主会话 2026-10-10，对 fa8e468 + a1981eb）
+
+背景：主会话对「快速建产品 + 前端改版」两提交调度了独立只读审阅（cursor-agent，brief 见 `.review/review-brief-3.md`，原文 `.review/cursor-review-3.txt`）。审阅执行期间与本仓库另一并行会话（WP0/WP1，Claude Code）的提交交错：其 `2919cd2`/`47b14d8` 已覆盖部分同源问题，F5 由其修复。本轮处理剩余 findings（全部前端）：
+
+| 编号 | 严重度 | 结论 | 处理 |
+| --- | --- | --- | --- |
+| F1 both 受众缺键时 audienceCounts 回退总计数：空受众页签串成另一受众数字、no-bills 漏报 | **P1** | **成立，fixed** | both 产品缺键视为 `{}`，禁止回退总和；复现测试 `both 产品某受众无得分时缺键不回退总计数`（先红后绿） |
+| F2 前端税号全零校验 `/^0+$/` 与后端 is_valid_hs「前 6 位全零即误码」不一致（0000001 落到 API 422） | P2 | **成立，fixed** | 对齐为 `hs.slice(0,6)==="000000"` 拒绝；用例 `前 6 位全零的税号本地即拒`（先红后绿） |
+| F3 ReasonList scoped 样式盖过改版后的全局 chip token（12px 非 mono、hover 无青底） | P2 | **成立，fixed** | 删 scoped 块，统一走全局 `.bill-chip-link` |
+| F4 Esc 关抽屉无测试；关闭后在途 fetchCompany 仍写 detail（重开竞态下串公司数据） | P2 | **成立，fixed** | 新增 `CompanyDrawer.test.ts`（Esc 开/关两用例 + `A 慢关开 B 快，A 迟到不覆盖 B` 先红后绿）；组件加 requestSeq 守卫，与买家列表同口径 |
+| F5 POST /api/products commit 后读计数失败 500 而库已有产品 | P2 | **已被并行会话修复** | `2919cd2`（提交时序前移到响应前 + 失败路径回归锁），无需重复处理 |
+
+审阅者自述的「begin_nested 重试」verified 项经核实为并行会话 WP0 引入（非本会话代码），其结论与仓库实际一致。
+
+最终状态：前端 35 passed（+5 防线）、lint 0 错、vue-tsc 通过、构建成功；后端 190 passed 未动。
+
+**合规快检（对并行会话 WP1 联系人功能）**：当前代码无任何外部按次查询实现（无 httpx/Hunter/Apollo/PDL；`finder` 仅为预留枚举），联系人来源仅 manual/csv/website 手工录入——不违反 AGENTS.md 硬约束。但 `docs/OUTREACH-COMPLIANCE.md` 规划的「按次查询补全（Hunter 等）」与硬约束「不接按次查询数据源入库存」**冲突**，实现前需用户明确裁决（改约束或改方案）。

@@ -362,6 +362,45 @@ describe("产品详情页（用户可见结果）", () => {
     expect(fetchBuyers).toHaveBeenCalledWith(2, expect.objectContaining({ audience: "factory" }));
   });
 
+  it("both 产品某受众无得分时缺键不回退总计数，页签为 0 且显示空指引（复现 F1）", async () => {
+    // counts_by_audience 只对有得分行的受众建键：factory 无得分 → 键缺失（不是 {}）
+    const bothProduct: Product = {
+      product_id: 6,
+      code: "P-BOTH-ASYM",
+      name: "不对称双受众",
+      description: "",
+      buyer_type: "both",
+      hs_codes: [
+        { hs_code: "620462", audience: "importer", note: "" },
+        { hs_code: "600632", audience: "factory", note: "" },
+      ],
+      counts: { precise: 3 },
+      counts_by_audience: { importer: { precise: 3 } },
+    };
+    vi.mocked(fetchProducts).mockResolvedValue([bothProduct]);
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: "/", component: { template: "<div>list</div>" } },
+        { path: "/products/:id", component: ProductDetailView },
+      ],
+    });
+    router.push("/products/6");
+    await router.isReady();
+    render(ProductDetailView, { global: { plugins: [router] } });
+    await screen.findByText("不对称双受众");
+    await waitFor(() => {
+      expect(screen.getByTestId("tab-precise").textContent).toContain("3");
+    });
+    // 切到工厂视角：计数必须是 0（缺键 → 空对象），不能串成 importer 的 3
+    await fireEvent.click(screen.getByText("工厂视角"));
+    await waitFor(() => {
+      expect(screen.getByTestId("tab-precise").textContent).toContain("0");
+    });
+    expect(screen.getByTestId("tab-potential").textContent).toContain("0");
+    expect(screen.getByTestId("no-bills-hint")).toBeTruthy();
+  });
+
   it("both 产品页签计数按受众细分且抽屉请求带受众（F5）", async () => {
     const bothProduct: Product = {
       product_id: 5,

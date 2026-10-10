@@ -1,0 +1,45 @@
+### F1 [P1] both 受众缺键时 `audienceCounts` 回退总计数，空指引漏报且页签串台
+- 位置：`frontend/src/features/products/views/ProductDetailView.vue:44-54`；后端键生成 `backend/app/infrastructure/queries.py:123-136`
+- 问题：`audienceCounts` 为 `counts_by_audience?.[audience] ?? counts`。`product_tier_counts` 只对**已有得分行**的受众建键；某受众零得分时键缺失（不是 `{}`）。both 且两类税号不对称时（F5 夹具即不同 HS），切到空受众会回退到总和 `counts`：`hasNoBills` 为 false（不显示「库里还没有该税号的提单」），页签数字却是另一受众的计数；列表按当前受众请求为空，出现「有数字、无行」。测试只锁 `counts_by_audience: {}` 全空与双键非零（`ProductDetailView.test.ts:206-223, 365-400`），未锁「缺一键」。
+- 影响：both 产品切换受众时误导计数与空态；快速建 both（同税号）对称打分时难触发，但 CSV/异构 both 会中招。
+- 建议：有 `buyer_type==="both"`（或产品上声明的受众列表）时缺键视为 `{}`，禁止回退总和；或后端按产品受众补齐空对象。补测：only-importer 有分、切 factory → 页签为 0 且显示 no-bills（或明确「该受众无匹配」）。
+
+### F2 [P2] 前端税号「全零」校验与后端 `is_valid_hs` 不一致
+- 位置：`frontend/src/features/products/components/QuickStartForm.vue:44-46`；`backend/app/domain/normalize.py:105-108`
+- 问题：前端拒 `/^0+$/`；后端拒**前 6 位** `000000`（如 `0000001`）。前端放行 → API 422，错误文案变成「创建失败：…」，与本地「不能全零」语义不一致。`QuickStartForm.test.ts` 只锁 `62x462`，未锁前导零。
+- 影响：边缘税号体验差；不落脏数据。
+- 建议：前端与 `c.slice(0,6)==="000000"` 对齐，并加用例。
+
+### F3 [P2] `ReasonList` scoped 样式盖住改版后的全局 chip token
+- 位置：`frontend/src/features/products/components/ReasonList.vue:32-46`；全局 `frontend/src/assets/main.css:307-317`
+- 问题：scoped 固定 `font: inherit; font-size: 12px; background: #eef1f5`，hover 无 `marine-soft` 底，压过全局 `11px mono` + hover 背景。`--accent` 别名本身有效（`main.css:25-33`），BillTable 用别名无冲突。
+- 影响：理由提单 chip 与舱单数据面视觉不一致；点击高亮行为仍由测试锁住。
+- 建议：删掉 scoped 重复，或改走全局 `.bill-chip-link`。
+
+### F4 [P2] Esc 关抽屉路径无测试；关闭后在途 `fetchCompany` 仍可写 `detail`
+- 位置：`frontend/src/features/products/components/CompanyDrawer.vue:32-58`
+- 问题：keydown 挂/卸（含 `onBeforeUnmount`）逻辑正确，无重复监听泄漏。但无 Escape 断言；且 `companyId==null` 后仍可能完成的请求写入 `detail`（模板靠 `v-if` 挡住，与买家列表的 requestSeq 不一致）。
+- 影响：Esc 回归无防；极端竞态下内存态脏（一般不露 UI）。
+- 建议：补 Esc 单测；fetch 加序号/Abort，关闭后丢弃响应。
+
+### F5 [P2] `POST /api/products` 在 `rescore_one.commit` 成功后若读计数失败仍 500，库已有产品
+- 位置：`backend/app/interface/routers/products.py:61-79`；`backend/app/infrastructure/importers.py:203-211`；`backend/app/interface/deps.py:25-31`
+- 问题：插入仅 flush，真正落库靠 `rescore_one` 的 `commit`——中途异常 + `session.close()` 不会留下半提交产品（事务焦点成立）。但 commit 之后若 `list_products_with_counts` 找不到行（79），返回 500「产品已创建但查询计数失败」，客户端当失败，库中已有产品+得分。接口测试用共享 session，未锁生产 close/中途失败。
+- 影响：极罕见；重提可能 409 或重复感知。
+- 建议：commit 后改 `get_product_with_counts(product_id)`；失败时 201+告警或明确「已创建请刷新」。
+
+---
+
+### 复核结论
+
+| 编号 | 状态 | 说明 |
+| --- | --- | --- |
+| 1 事务边界 | verified | flush→`rescore_one.commit`；失败未 commit 由 close 丢弃；见 F5 仅事后 500 |
+| 2 next_quick_code | verified | `code` UNIQUE + `begin_nested` 重试；infra 并发测锁住 |
+| 3 默认买家词/同行 | verified | 精准缺席有接口测；同行无默认有文档+表单 placeholder，非缺陷 |
+| 4 Esc 生命周期 | verified | 无泄漏；覆盖缺口见 F4 |
+| 5 hasNoBills | rejected | 缺键回退总和 → **F1 P1** |
+| 6 CSS 兼容 | verified | 旧 token/类名有别名；ReasonList scoped 漂移 → **F3 P2** |
+| 7 前后端校验 | rejected | 主路径一致有测；全零规则 → **F2 P2** |
+
+**未发现新 P0。新 P1：F1。新 P2：F2–F5。**

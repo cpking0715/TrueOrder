@@ -28,20 +28,3 @@ const emit = defineEmits<{ locate: [billId: number] }>();
     </li>
   </ul>
 </template>
-
-<style scoped>
-.bill-chip-link {
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  background: #eef1f5;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 1px 7px;
-  color: var(--ink-soft);
-}
-.bill-chip-link:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-</style>

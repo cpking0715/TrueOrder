@@ -48,6 +48,15 @@ describe("QuickStartForm 校验", () => {
     expect(await screen.findByText(/税号需为 6-10 位数字/));
     expect(createProduct).not.toHaveBeenCalled();
   });
+
+  it("前 6 位全零的税号本地即拒，不落到后端 422（对齐 is_valid_hs）", async () => {
+    render(QuickStartForm);
+    fill("产品名称", "女士棉质长裤");
+    fill("HS 税号", "0000001"); // 7 位、前 6 位全零：旧规则 /^0+$/ 放行 → API 422
+    fireEvent.click(screen.getByRole("button", { name: "找客户" }));
+    expect(await screen.findByText(/不能全零/));
+    expect(createProduct).not.toHaveBeenCalled();
+  });
 });
 
 describe("QuickStartForm 提交", () => {
