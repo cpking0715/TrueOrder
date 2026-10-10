@@ -29,10 +29,8 @@ function countOf(tier: string): number {
       <span
         v-for="hs in product.hs_codes"
         :key="hs.hs_code + hs.audience"
-        class="badge"
-      >
-        HS {{ hs.hs_code }}
-      </span>
+        class="badge hs"
+      >HS {{ hs.hs_code }}</span>
     </div>
     <p class="muted small">
       {{ product.description }}
@@ -46,14 +44,8 @@ function countOf(tier: string): number {
     </p>
     <div class="counts">
       <span><span class="num potential">{{ countOf("potential") }}</span> 潜在</span>
-      <span><span
-        class="num"
-        style="color: var(--ok)"
-      >{{ countOf("precise") }}</span> 精准</span>
-      <span><span
-        class="num"
-        style="color: var(--danger)"
-      >{{ countOf("excluded") }}</span> 排除</span>
+      <span><span class="num go">{{ countOf("precise") }}</span> 精准</span>
+      <span><span class="num stamp">{{ countOf("excluded") }}</span> 排除</span>
     </div>
   </RouterLink>
 </template>

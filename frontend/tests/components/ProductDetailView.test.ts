@@ -200,6 +200,25 @@ describe("产品详情页（用户可见结果）", () => {
     expect(await screen.findByTestId("buyers-empty")).toBeTruthy();
   });
 
+  it("计数全为 0 的产品显示导入提单指引", async () => {
+    vi.mocked(fetchProducts).mockResolvedValue([
+      { ...productFixture, name: "新产品", counts: {}, counts_by_audience: {} },
+    ]);
+    vi.mocked(fetchBuyers).mockResolvedValue({
+      items: [], total: 0, audience: "importer", tier: null, q: null,
+    });
+    await renderView();
+    const hint = await screen.findByTestId("no-bills-hint");
+    expect(hint.textContent).toContain("库里还没有该税号的提单");
+    expect(hint.textContent).toContain("导入提单");
+  });
+
+  it("计数非 0 的产品不显示导入指引", async () => {
+    await renderView();
+    await screen.findByText("女士棉质长裤（成衣）");
+    expect(screen.queryByTestId("no-bills-hint")).toBeNull();
+  });
+
   it("点击公司行打开抽屉：票数、最近到港、供货方、理由与提单", async () => {
     await renderView();
     await screen.findByText("女士棉质长裤（成衣）");

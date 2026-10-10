@@ -70,6 +70,10 @@ async function submit() {
     data-testid="quickstart-form"
     @submit.prevent="submit"
   >
+    <div class="strip">
+      <span class="strip-code">Manifest Search</span>
+      <span class="strip-title">授权提单库检索</span>
+    </div>
     <div class="fields">
       <label>
         产品名称
@@ -79,12 +83,12 @@ async function submit() {
           data-testid="quickstart-name"
         >
       </label>
-      <label>
+      <label class="hs-input">
         HS 税号
         <input
           v-model="hsCode"
           inputmode="numeric"
-          placeholder="如：620462"
+          placeholder="620462"
           data-testid="quickstart-hs"
         >
       </label>
@@ -132,6 +136,7 @@ async function submit() {
     <div class="actions">
       <button
         type="submit"
+        class="primary"
         :disabled="submitting"
       >
         {{ submitting ? "正在匹配客户…" : "找客户" }}

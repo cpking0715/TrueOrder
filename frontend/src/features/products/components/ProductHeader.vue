@@ -12,6 +12,9 @@ const buyerTypeLabel: Record<string, string> = {
 </script>
 
 <template>
+  <p class="eyebrow">
+    HS {{ product.hs_codes.map((h) => h.hs_code).join(" / ") }} · {{ audience === "factory" ? "FACTORY BUYERS" : "IMPORTERS" }}
+  </p>
   <h1>{{ product.name }}</h1>
   <p class="muted">
     <span
@@ -21,7 +24,7 @@ const buyerTypeLabel: Record<string, string> = {
     <span
       v-for="hs in product.hs_codes"
       :key="hs.hs_code"
-      class="badge"
+      class="badge hs"
     >
       HS {{ hs.hs_code }}
     </span>

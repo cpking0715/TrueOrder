@@ -40,6 +40,12 @@ const audienceCounts = computed(() => {
   return current.counts_by_audience?.[audience.value] ?? current.counts;
 });
 
+// 空结果指引：新产品计数全 0 → 告诉用户去哪补数据
+const hasNoBills = computed(() =>
+  product.value != null
+  && Object.values(audienceCounts.value).reduce((a, b) => a + b, 0) === 0,
+);
+
 const filters = useBuyerFilters(
   () => productId.value,
   () => audience.value,
@@ -129,6 +135,17 @@ watch(
       :audience="audience"
       @update:audience="audience = $event; loadBuyers()"
     />
+    <p
+      v-if="hasNoBills"
+      class="alert"
+      data-testid="no-bills-hint"
+    >
+      库里还没有该税号的提单。先到
+      <RouterLink to="/">
+        首页底部的「导入提单 CSV」
+      </RouterLink>
+      导入授权数据，再回来查这个产品。
+    </p>
     <BuyerTabs
       :tier="filters.state.value.tier"
       :counts="audienceCounts"

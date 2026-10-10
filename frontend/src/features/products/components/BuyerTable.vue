@@ -45,7 +45,7 @@ function reasonPreview(buyer: Buyer): string {
       <tr
         v-for="buyer in buyers"
         :key="buyer.company_id"
-        class="clickable"
+        :class="['clickable', 'rail-' + buyer.tier]"
         @click="emit('select', buyer)"
       >
         <td>
@@ -58,9 +58,15 @@ function reasonPreview(buyer: Buyer): string {
             同名冲突
           </span>
         </td>
-        <td>{{ buyer.country }}<span v-if="buyer.city"> · {{ buyer.city }}</span></td>
-        <td>{{ buyer.shipments }}</td>
-        <td>{{ buyer.last_arrival ?? "—" }}</td>
+        <td class="code">
+          {{ buyer.country }}<span v-if="buyer.city"> · {{ buyer.city }}</span>
+        </td>
+        <td class="num">
+          {{ buyer.shipments }}
+        </td>
+        <td class="code">
+          {{ buyer.last_arrival ?? "—" }}
+        </td>
         <td class="small">
           {{ buyer.suppliers.join("；") || "—" }}
         </td>

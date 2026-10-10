@@ -21,11 +21,11 @@ const tabs: Array<{ key: Tier; label: string }> = [
       :key="tab.key"
       role="tab"
       :aria-selected="tab.key === tier"
-      :class="{ active: tab.key === tier }"
+      :class="['t-' + tab.key, { active: tab.key === tier }]"
       :data-testid="`tab-${tab.key}`"
       @click="emit('change', tab.key)"
     >
-      {{ tab.label }}（{{ counts?.[tab.key] ?? 0 }}）
+      {{ tab.label }}<span class="num">（{{ counts?.[tab.key] ?? 0 }}）</span>
     </button>
   </div>
 </template>

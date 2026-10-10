@@ -57,7 +57,12 @@ async function onBillsFile(event: Event) {
     class="panel"
     data-testid="import-panel"
   >
-    <h2>数据导入（CSV）</h2>
+    <p class="eyebrow">
+      Data Intake
+    </p>
+    <h2 style="margin-top: 0">
+      数据导入（CSV）
+    </h2>
     <p class="muted small">
       产品目录每行一个产品 + 税号 + 买家类型；提单走同一入口，导入后自动重新打分。
       样本字段说明见 backend/app/seed/sample_bills.README.md。

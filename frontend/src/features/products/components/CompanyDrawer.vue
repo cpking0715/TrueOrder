@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { fetchCompany, type CompanyDetail } from "@/api/products";
 import BillTable from "./BillTable.vue";
 import ReasonList from "./ReasonList.vue";
+import ScoreSummary from "./ScoreSummary.vue";
 
 const props = defineProps<{
   companyId: number | null;
@@ -26,13 +27,27 @@ const score = computed(() => {
     ?? null;
 });
 
+const tierLabel: Record<string, string> = {
+  precise: "精准客户",
+  potential: "潜在客户",
+  excluded: "已排除",
+};
+
+// Esc 关抽屉：窗口级监听，随抽屉开关挂/卸
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === "Escape") emit("close");
+}
+onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
+
 watch(
   () => [props.companyId, props.productId, props.audience] as const,
   async ([id]) => {
+    window.removeEventListener("keydown", onKeydown);
     if (id == null) {
       detail.value = null;
       return;
     }
+    window.addEventListener("keydown", onKeydown);
     loading.value = true;
     error.value = "";
     try {
@@ -94,7 +109,13 @@ async function locateBill(billId: number) {
         加载失败：{{ error }}
       </div>
       <template v-else-if="detail">
-        <h2>{{ detail.company.name }}</h2>
+        <h2>
+          {{ detail.company.name }}
+          <span
+            v-if="score"
+            :class="['badge', score.tier]"
+          >{{ tierLabel[score.tier] }}</span>
+        </h2>
         <p class="muted small">
           {{ detail.company.country }}<span v-if="detail.company.city"> · {{ detail.company.city }}</span>
           · 规范名：{{ detail.company.normalized_name }}
@@ -113,23 +134,7 @@ async function locateBill(billId: number) {
         </p>
 
         <template v-if="score">
-          <div class="summary-grid">
-            <div class="box">
-              <div class="num">
-                {{ score.shipments }}
-              </div>票数
-            </div>
-            <div class="box">
-              <div class="num">
-                {{ score.last_arrival ?? "—" }}
-              </div>最近到港
-            </div>
-            <div class="box">
-              <div class="num small">
-                {{ score.suppliers.length }}
-              </div>供货方
-            </div>
-          </div>
+          <ScoreSummary :score="score" />
           <h2>得分理由</h2>
           <ReasonList
             :reasons="score.reasons"
