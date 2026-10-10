@@ -264,3 +264,53 @@ verdict：F1/F2/F4/F5/F6a 全部 verified；F6b/F7 处理被认可；F3 的修�
 教训记录（同一天第二次）：改 CI/配置未实跑、依赖本机环境差异掩盖——N1 与 F2 同根。本轮已用「本机完整模拟 CI 步骤 + 真实退出码」的实跑口径收口。
 
 最终状态（61fd58b）：后端 153 passed + smoke 2 + ruff 干净；迁移 4 passed（含 compare_metadata 全量比对）；CI 步骤全部本机等价实跑。WP0 交付。
+
+---
+
+# Handoff — TrueOrder WP1 联系人与来源（DEV-SPEC WP1 + 遗留 findings，2026-10-10）
+
+## 任务
+
+按 `docs/DEV-SPEC.md` WP1 实施联系人全链路（第一期信息获取主线），并处理上上轮试点审阅的遗留 findings（产品详情路由、排除测试证据链断言）。
+
+## 已实现
+
+1. **迁移**（`244c6cd8340a`）：`contacts` 表——部分唯一索引 `uq_contacts_company_email (company_id, lower(email)) WHERE email IS NOT NULL`、`source`/`verify_status` CHECK 约束、FK 级联删；`companies` 加 `website`/`website_confirmed`（带 server_default，存量库安全）。
+2. **domain/contacts.py**：`normalize_email`（空→NULL）、`is_valid_email`（最低格式）、`is_generic_email`（19 个公共前缀词表）、`contact_dedup_key`。12 个领域单测（先红后绿：模块从无到有）。
+3. **API**（`routers/contacts.py` 新文件）：公司联系人 CRUD（同公司同邮箱大小写不敏感 409、坏邮箱 422、公司 404）；`POST /api/contacts/import`（company_id 或「企业名+国家」双定位、重复计 duplicates、20MB 上限 + Content-Length 预检）；`PATCH /api/companies/{id}` 官网字段；`GET /api/products/{id}/contacts/export.csv`（与买家列表同一组筛选，每联系人一行，默认排除 do_not_contact 与 invalid/bounced，`include_invalid=true` 只放开验证状态——**DNC 是联系意愿永不导出**，此语义由测试暴露的歧义修正）。
+4. **前端**：抽屉新增联系人区（ContactsPanel/ContactItem/ContactForm 组件族：新增/行内编辑/标记不再联系/删除/通用邮箱与验证状态标签）、官网编辑（WebsiteField）、买家列表「导出联系人 CSV」按钮（复用买家筛选参数）。CompanyDrawer 超行数红线两次拆分（ScoreSection、CompanySummary 出去），全部组件 ≤150 行。
+5. **遗留 findings**：`GET /api/products/{id}` 详情路由（先红后绿）；银行/货代/集团内部排除测试补 `reason.bill_ids` 断言（实现本已满足，断言补齐锁定）；同行海外用例已有断言无需改。
+
+## Diff 基线
+
+base=61fd58b  head=01babf6
+审阅范围命令：git diff 61fd58b...01babf6
+
+## 改动文件
+
+后端：`domain/contacts.py`、`infrastructure/contact_repository.py`（新）、`interface/routers/contacts.py`（新）、`queries.py`（company_detail 加官网字段 + get_product_with_counts）、`schemas.py`（6 个 DTO）、`orm.py`（ContactORM + companies 两列）、`routers/products.py`（详情路由）、迁移 1 个。
+前端：`api/contacts.ts`（新）、组件 6 个（4 新 2 拆分）、`ProductDetailView`（导出按钮）、`schema.d.ts` 重新生成。
+
+## 测试
+
+- `uv run pytest -q` → **184 passed**（基线 153 → +31：领域 12、schema 5、接口 12+2 详情）
+- `uv run pytest -q -m smoke` → **2 passed**
+- `uv run ruff check .` → All checks passed
+- `pnpm test` → **30 passed**（+5 ContactsPanel）；`pnpm exec eslint .` / `vue-tsc --noEmit` → 通过
+- 迁移测试含「WP0 时代旧库（剥离 WP1 对象模拟）stamp 基线后升级补齐 contacts 与官网列」
+
+## 已知假设与未验证项
+
+- **website_confidence 导出列为空**：规格 WP1 导出列含「官网置信度」，但 `website_source`/`website_confidence` 列属 WP4 迁移；当前导出保留列头、值为空，WP4 落地后填。
+- **前端浏览器冒烟未跑**：组件级行为由 30 个 Vitest 锁定，但「抽屉联系人区 + 导出按钮」的端到端浏览器操作未实机点过（smoke 测试覆盖 API 链路）。
+- products.py 216 行仍超路由文件 200 红线（WP0 遗留）：本轮未重构拆分，避免与功能改动混在一个提交；建议下轮纯重构处理。
+- F6b（并发同参数绕过产品 409 查重）维持 open：联系人侧同类问题已由 DB 部分唯一索引天然兜底（插入竞态由唯一约束拒绝→409）。
+
+## Review 焦点
+
+1. **部分唯一索引语义**：`uq_contacts_company_email` 与领域 `contact_dedup_key` 的一致性；无邮箱多条、跨公司同邮箱的行为是否都被测到。
+2. **导出 JOIN 语义**：`export_rows` 先取买家列表公司集合再查联系人——公司与联系人 join 无重复行？`include_invalid` 与 DNC 的过滤组合边界。
+3. **CSV 导入定位**：`_resolve_company` 的 company_id 优先/名称+国家回退顺序、`company_not_found` 与 `invalid_rows` 的归类是否会互相吞错误。
+4. **前端组件拆分**：ContactItem 的 `@update` emit 链（panel 传 contact_id）是否会把 A 联系人的编辑提交到 B。
+5. **迁移**：部分唯一索引在 alembic autogenerate 产物中的 `postgresql_where` 保真度；`website_confirmed` server_default 对存量库的影响。
+6. **产品详情路由**与既有列表路由的 id 冲突（`/api/products/{product_id}` vs `/api/products/import` 的路由顺序）。
