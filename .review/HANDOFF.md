@@ -250,3 +250,17 @@ base=1351d68  head=7266ca6
 | `uv run pytest -q -m smoke` | **2 passed** |
 | `uv run ruff check .` | All checks passed |
 | `uv run python -m app.bootstrap` | 幂等（重复 26 票，索引在位） |
+
+## 复审记录（Claude Code 2026-10-10，对修复轮 9261b99）
+
+verdict：F1/F2/F4/F5/F6a 全部 verified；F6b/F7 处理被认可；F3 的修复引入 CI 回归（新问题 3 条）。
+
+| 编号 | 严重度 | 结论 | 处理（61fd58b） |
+| --- | --- | --- | --- |
+| N1 CI `alembic check` 连的 trueorder 库从未被迁移，必红（本机因手动升级过而掩盖） | 高 | **成立，fixed** | check 前加 `uv run alembic upgrade head`；本机建空库完整模拟 CI 步骤实跑：`No new upgrade operations detected`，exit 0（用 PIPESTATUS 取真实退出码验证） |
+| N2 ORM 已含索引之后 create_all 的库，stamp 后 upgrade 因裸 `create_index` 无 IF NOT EXISTS 报错 | 低 | **成立，fixed** | 迁移改原生 `CREATE INDEX IF NOT EXISTS`（`postgresql_if_not_exists` 参数本版 SQLAlchemy 不支持，先踩后改）；既有「create_all+stamp+upgrade」测试绿 |
+| N3 `int(content-length)` 非法值理论上 500 | 极低 | **rejected** | uvicorn/h11 对非法 Content-Length 前置拒绝，审阅方自评不构成实际风险 |
+
+教训记录（同一天第二次）：改 CI/配置未实跑、依赖本机环境差异掩盖——N1 与 F2 同根。本轮已用「本机完整模拟 CI 步骤 + 真实退出码」的实跑口径收口。
+
+最终状态（61fd58b）：后端 153 passed + smoke 2 + ruff 干净；迁移 4 passed（含 compare_metadata 全量比对）；CI 步骤全部本机等价实跑。WP0 交付。
