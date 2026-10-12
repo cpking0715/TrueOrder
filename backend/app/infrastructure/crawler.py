@@ -16,7 +16,7 @@ from urllib.parse import urljoin, urlparse
 import httpcore
 import httpx
 
-from app.domain.contacts import extract_emails, select_crawl_pages
+from app.domain.contacts import extract_emails, extract_named_contacts, select_crawl_pages
 from app.domain.entities import FoundContact
 
 MAX_PAGES = 5
@@ -106,12 +106,21 @@ class WebsiteCrawler:
 
         result = CrawlResult()
         emails: dict[str, str] = {}  # email -> 首次出现的页面 URL
+        named: list[FoundContact] = []  # 具名联系人（姓名+职位猜测），优先于裸邮箱
 
         def fetch_and_harvest(url: str) -> str | None:
             html = self._fetch_text(url)
             if html is None:
                 return None
             result.pages_fetched.append(url)
+            for name, email, title in extract_named_contacts(html):
+                if email.lower() not in {c.email.lower() for c in named}:
+                    named.append(
+                        FoundContact(
+                            name=name, title=title, email=email,
+                            phone=None, source_ref=f"website:{url}",
+                        )
+                    )
             for email in extract_emails(html):
                 emails.setdefault(email, url)
             return html
@@ -125,10 +134,13 @@ class WebsiteCrawler:
         for url in select_crawl_pages(base_url, links, MAX_PAGES)[1:]:
             fetch_and_harvest(url)
 
-        result.contacts = [
+        named_emails = {c.email.lower() for c in named}
+        bare = [
             FoundContact(name=None, title="", email=email, phone=None, source_ref=f"website:{url}")
             for email, url in emails.items()
+            if email.lower() not in named_emails
         ]
+        result.contacts = named + bare
         return result
 
     def _respect_robots(self, parsed) -> None:

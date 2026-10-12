@@ -65,7 +65,7 @@ class WikidataDirectory:
             if normalize_company_name(item.get("label", "")) == normalized
         ]
         for item in candidates[:MAX_CANDIDATES]:
-            website = self._claim_value(item["id"], "P856")
+            website = self._pick_canonical_website(self._claim_values(item["id"], "P856"))
             if not website:
                 continue
             return FoundWebsite(
@@ -79,7 +79,32 @@ class WikidataDirectory:
 
     # ---------- 内部 ----------
 
-    def _claim_value(self, entity_id: str, property_id: str) -> str:
+    @staticmethod
+    def _pick_canonical_website(urls: list[str]) -> str:
+        """多值官网取最「主站」的一个：无路径 > 有路径；非区域前缀 > 区域前缀。"""
+        from urllib.parse import urlparse
+
+        # 国别顶级域（区域站信号）：com.cn / co.uk 之类
+        cc_tlds = {
+            "cn", "uk", "jp", "de", "fr", "at", "it", "es", "kr", "in",
+            "au", "ca", "nl", "br", "mx", "vn", "th", "tr", "pl", "se",
+        }
+
+        def score(url: str) -> tuple:
+            parsed = urlparse(url)
+            host = (parsed.hostname or "").lower()
+            labels = host.split(".")
+            regional = len(labels) > 2 and len(labels[0]) == 2 and labels[0] != "www"
+            cctld = labels[-1] in cc_tlds
+            has_path = parsed.path not in ("", "/")
+            return (has_path, regional, cctld, len(labels))
+
+        valid = [u for u in urls if u.startswith(("http://", "https://"))]
+        if not valid:
+            return ""
+        return min(valid, key=score)
+
+    def _claim_values(self, entity_id: str, property_id: str) -> list[str]:
         time.sleep(self._delay)
         data = self._fetch(
             API,
@@ -91,11 +116,22 @@ class WikidataDirectory:
             },
         )
         claims = (data or {}).get("claims", {}).get(property_id, [])
-        if not claims:
-            return ""
-        datavalue = claims[0].get("mainsnak", {}).get("datavalue", {})
-        value = datavalue.get("value", "")
-        return str(value) if value else ""
+        values: list[str] = []
+        for claim in claims:
+            value = claim.get("mainsnak", {}).get("datavalue", {}).get("value", "")
+            if isinstance(value, dict):
+                # 实体型 claim（如 P17 国家）：{"id": "Q30", "numeric-id": 30}
+                value = value.get("id") or (
+                    f"Q{value.get('numeric-id')}" if value.get("numeric-id") else ""
+                )
+            value = str(value or "")
+            if value and value not in values:
+                values.append(value)
+        return values
+
+    def _claim_value(self, entity_id: str, property_id: str) -> str:
+        values = self._claim_values(entity_id, property_id)
+        return values[0] if values else ""
 
     def _entity_country(self, entity_id: str) -> str:
         qid = self._claim_value(entity_id, "P17")

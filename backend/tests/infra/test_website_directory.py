@@ -106,3 +106,42 @@ class Test容错:
         directory, http = make_dir({})
         assert directory.search("", "US") is None
         assert http.calls == []
+
+
+class Test官网多值择优:
+    def test_有路径的区域站让位无路径主站(self):
+        from app.infrastructure.website_directory import WikidataDirectory as W
+        assert W._pick_canonical_website(
+            ["https://apple.com/at/", "https://www.apple.com"]
+        ) == "https://www.apple.com"
+
+    def test_区域子域让位主域(self):
+        from app.infrastructure.website_directory import WikidataDirectory as W
+        assert W._pick_canonical_website(
+            ["https://at.apple.com/", "https://apple.com"]
+        ) == "https://apple.com"
+
+    def test_全都有路径时取首个(self):
+        from app.infrastructure.website_directory import WikidataDirectory as W
+        assert W._pick_canonical_website(["https://a.com/x", "https://b.com/y"]) == "https://a.com/x"
+
+    def test_多值claim集成(self):
+        directory, _ = make_dir({
+            "wbsearchentities:Brooklyn Apparel LLC": search_response("Brooklyn Apparel", "Q1"),
+            "wbgetclaims:Q1|P856": {
+                "claims": {"P856": [
+                    {"mainsnak": {"datavalue": {"value": "https://brooklynapparel.com/us/"}}},
+                    {"mainsnak": {"datavalue": {"value": "https://brooklynapparel.com"}}},
+                ]}
+            },
+            "wbgetclaims:Q1|P17": claims_response("P17", "Q30"),
+            "wbgetclaims:Q1|P968": {"claims": {}},
+        })
+        found = directory.search("Brooklyn Apparel LLC", "US")
+        assert found.website == "https://brooklynapparel.com"
+
+    def test_国别域名让位通用主域(self):
+        from app.infrastructure.website_directory import WikidataDirectory as W
+        assert W._pick_canonical_website(
+            ["https://apple.com.cn/", "https://apple.com"]
+        ) == "https://apple.com"

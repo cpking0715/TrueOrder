@@ -105,3 +105,33 @@ class Test抓取页选择:
     def test_去重与相对路径解析(self):
         selected = select_crawl_pages(BASE, ["/about", "/about", "about"])
         assert selected.count("https://www.example.com/about") == 1
+
+
+class Test具名联系人抽取:
+    def test_姓名冒号邮箱(self):
+        from app.domain.contacts import extract_named_contacts
+        rows = extract_named_contacts("Contact John Smith: john@example.com for quotes")
+        assert rows and rows[0][0] == "John Smith" and rows[0][1] == "john@example.com"
+
+    def test_邮箱括号姓名的反向形态(self):
+        from app.domain.contacts import extract_named_contacts
+        rows = extract_named_contacts("reach mary@example.com (Mary Chen)")
+        assert rows and rows[0][0] == "Mary Chen" and rows[0][1] == "mary@example.com"
+
+    def test_职位线索从上文猜(self):
+        from app.domain.contacts import extract_named_contacts
+        rows = extract_named_contacts("Sales Manager: Tom Brown <tom@example.com>")
+        assert rows and "Sales" in rows[0][2] or rows and rows[0][2] == "Sales Manager"
+
+    def test_无姓名的裸邮箱不进具名列表(self):
+        from app.domain.contacts import extract_named_contacts
+        rows = extract_named_contacts("email info@example.com or call us")
+        assert rows == []
+
+    def test_脚本内容不参与抽取(self):
+        from app.domain.contacts import extract_named_contacts
+        rows = extract_named_contacts(
+            "<script>var x='John Doe: fake@example.com'</script>"
+            "<p>Anna Kim: anna@example.com</p>"
+        )
+        assert [r[1] for r in rows] == ["anna@example.com"]

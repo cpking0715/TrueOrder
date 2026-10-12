@@ -142,3 +142,26 @@ class TestSSRF地址判定:
         from app.infrastructure.crawler import _host_is_fetchable
 
         assert _host_is_fetchable("nonexistent.invalid", allow_loopback=False) is False
+
+
+class Test具名联系人:
+    def test_页面上的姓名邮箱对进具名联系人带职位(self, make_site):
+        base = make_site({
+            "/": 'Contact our Sales Manager John Smith: john@example.com',
+        })
+        result = crawler().crawl(f"{base}/")
+        assert len(result.contacts) == 1
+        c = result.contacts[0]
+        assert c.name == "John Smith"
+        assert c.email == "john@example.com"
+        assert "sales" in c.title.lower()
+
+    def test_具名与裸邮箱并存不重复(self, make_site):
+        base = make_site({
+            "/": 'Anna Kim: anna@example.com | general: info@example.com',
+        })
+        result = crawler().crawl(f"{base}/")
+        by_email = {c.email: c for c in result.contacts}
+        assert by_email["anna@example.com"].name == "Anna Kim"
+        assert by_email["info@example.com"].name is None
+        assert len(result.contacts) == 2

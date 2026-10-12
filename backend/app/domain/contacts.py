@@ -19,6 +19,61 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _EMAIL_EXTRACT_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 _PHONE_EXTRACT_RE = re.compile(r"\+\d{1,3}[\s(-]?\d{1,4}[\s)-]?\d{3,4}[\s-]?\d{0,4}")
 
+# 具名联系人：姓名与邮箱成对出现（"Name: email" / "Name (email)" / "email (Name)" / "Name <email>"）
+_PERSON_NAME = r"[A-Z][a-zA-Z.'-]+(?:\s+[A-Z][a-zA-Z.'-]+){1,2}"
+_EMAIL_ADDR = r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"
+_NAMED_PATTERNS = (
+    re.compile(rf"({_PERSON_NAME})\s*[:(\[\-—]\s*({_EMAIL_ADDR})"),
+    re.compile(rf"({_EMAIL_ADDR})\s*[(\[—：]\s*({_PERSON_NAME})\s*[)\]]"),
+    re.compile(rf"({_PERSON_NAME})\s*<({_EMAIL_ADDR})>"),
+)
+# 名字前常被吞进来的礼貌词/动词，从姓名头部剥掉
+_NAME_LEADING_NOISE = (
+    "contact", "email", "mail", "reach", "ask", "call", "write", "please",
+    "mr", "mrs", "ms", "dr", "and", "or", "the", "our", "to", "at", "for",
+)
+_SCRIPT_STYLE_RE = re.compile(
+    r"<(script|style)\b[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL
+)
+# 职位线索：出现在邮箱前 60 字内的这些词，取含词的短语作 title
+_TITLE_TOKENS = (
+    "sales", "purchas", "procure", "buy", "sourcing", "marketing", "export",
+    "manager", "director", "ceo", "owner", "founder", "contact", "head",
+)
+
+
+def extract_named_contacts(text: str) -> list[tuple[str, str, str]]:
+    """从页面文本抽「(姓名, 邮箱, 职位猜测)」；脚本/样式块剔除；无姓名不进列表。"""
+    cleaned = _SCRIPT_STYLE_RE.sub(" ", text or "")
+    seen: set[str] = set()
+    result: list[tuple[str, str, str]] = []
+    for pattern in _NAMED_PATTERNS:
+        for match in pattern.finditer(cleaned):
+            first, second = match.group(1), match.group(2)
+            # 反向形态：group1 是邮箱
+            email, name = (first, second) if "@" in first else (second, first)
+            email = email.rstrip(".,;:!?").strip()
+            words = name.split()
+            noise = set(_NAME_LEADING_NOISE) | set(_TITLE_TOKENS)
+            while words and words[0].lower().strip(".,;:") in noise:
+                words.pop(0)
+            name = " ".join(words)
+            if not name:
+                continue
+            if email.lower() in seen:
+                continue
+            seen.add(email.lower())
+            window = cleaned[max(0, match.start() - 60):match.start()].lower()
+            title = ""
+            for token in _TITLE_TOKENS:
+                idx = window.rfind(token)
+                if idx >= 0:
+                    snippet = window[idx:].strip(" .,;:->|'\"")
+                    title = snippet[:40].strip().title()
+                    break
+            result.append((name.strip(), email, title))
+    return result
+
 
 def normalize_email(raw: str | None) -> str | None:
     """strip + 小写；空输入返回 None（存 NULL，不参与唯一约束）。"""

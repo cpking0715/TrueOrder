@@ -482,3 +482,25 @@ verdict：**F1-F4 全部 verified**（复审通过读 fastapi 0.143 源码确认
 - **真实联通验证**：dev 库造 Apple Inc → 真实 worker 链路 → job done，官网候选 `https://apple.com/at/`（source=wikidata，medium 候选等确认，零额度）。已知限制：P856 多值时取首条可能是区域站（apple.com/at），后续可按「非区域路径优先」改进
 
 门禁：后端 **279 passed + smoke 5** + ruff 干净；前端 45 + lint/build 绿。测试增长：目录 6 + 处理器目录集成 3。
+
+## 免费源增强第二轮：具名联系人抽取 + Wikidata 官网择优（2026-10-12）
+
+主诉求「获取信息和联系方式」继续扩源，两项全部免 Key：
+
+1. **官网抓取升级为具名联系人提取**（domain/contacts.extract_named_contacts）：
+   四种形态（"Name: email"/"Name (email)"/"email (Name)"/"Name <email>"）正则配对；
+   姓名/邮箱交换方向自适应；礼貌词与职位词从姓名头部剥离（Contact/our/Sales Manager…）；
+   职位从前文 60 字窗口猜（sales/purchas/procure/buyer/sourcing…）；
+   script/style 块剔除。爬虫接线：具名（带职位）优先，裸邮箱不与具名重复。
+   具名联系人在 pick_best_recipient 排序最高——直接提升可用性。
+2. **Wikidata 官网多值择优**（_pick_canonical_website）：无路径 > 有路径、
+   非区域前缀 > 区域前缀（at.）、通用 TLD > 国别域（com.cn）、更少标签优先；
+   P17 国家 claim 是实体型 dict（{"id":"Q30"}），_claim_values 兼容字符串与实体两形态
+   （此前国家恒空 → 真实体只能 medium 候选）。
+
+真实复验（Apple Inc，真实 Wikidata）：website=apple.com（不再是 /at/ 或 com.cn）、
+country=US（高置信可自动采用）。测试 +12（具名 5 + 爬虫具名 2 + 择优 4 + ccTLD 1）。
+坑位（再犯）：bash heredoc 写含 \b/\1 的正则会把转义变控制字符写进文件——本轮第三次踩，
+已改用字节级替换修复；后续正则一律走 Edit 工具或 chr(92) 构造。
+
+门禁：后端 291 + smoke 5 + ruff 干净；前端 45 + lint/build 绿。
