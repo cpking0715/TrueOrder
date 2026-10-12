@@ -422,6 +422,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/hs/suggest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Suggest Hs */
+        get: operations["suggest_hs_api_hs_suggest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -815,6 +832,15 @@ export interface components {
              * @default
              */
             note: string;
+        };
+        /** HsSuggestOut */
+        HsSuggestOut: {
+            /** Hs Code */
+            hs_code: string;
+            /** Shipments */
+            shipments: number;
+            /** Sample Description */
+            sample_description: string;
         };
         /** ImportSummaryOut */
         ImportSummaryOut: {
@@ -1894,6 +1920,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suggest_hs_api_hs_suggest_get: {
+        parameters: {
+            query: {
+                q: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HsSuggestOut"][];
                 };
             };
             /** @description Validation Error */

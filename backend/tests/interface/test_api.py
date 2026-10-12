@@ -463,3 +463,20 @@ class Test产品详情:
 
     def test_产品不存在404(self, client):
         assert client.get("/api/products/99999").status_code == 404
+
+
+class Test税号反查:
+    def test_按品名关键词聚合税号分布(self, client):
+        seed_via_api(client)
+        r = client.get("/api/hs/suggest", params={"q": "COTTON TROUSERS"})
+        assert r.status_code == 200, r.text
+        items = r.json()
+        assert items and items[0]["hs_code"] == "620462"  # 样本里棉质裤全部挂这个码
+        assert items[0]["shipments"] >= 3
+        assert items[0]["sample_description"]
+
+    def test_中文关键词与空关键词(self, client):
+        seed_via_api(client)
+        assert client.get("/api/hs/suggest", params={"q": "TROUSERS"}).json().__len__() >= 1
+        assert client.get("/api/hs/suggest", params={"q": "  "}).status_code == 422
+        assert client.get("/api/hs/suggest", params={"q": "不存在的品名xyz"}).json() == []

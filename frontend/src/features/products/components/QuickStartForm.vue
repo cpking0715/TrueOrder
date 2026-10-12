@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { createProduct, type Product } from "@/api/products";
+import HsSuggest from "./HsSuggest.vue";
 
 const emit = defineEmits<{ created: [product: Product] }>();
 
@@ -94,6 +95,10 @@ async function submit() {
           data-testid="quickstart-hs"
         >
       </label>
+      <HsSuggest
+        :initial-keyword="name"
+        @pick="hsCode = $event"
+      />
       <label>
         卖给谁
         <select

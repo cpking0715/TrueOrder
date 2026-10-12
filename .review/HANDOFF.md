@@ -574,3 +574,14 @@ Wikidata 免费优先落地后的两处配套缺口（均先红后绿）：
 门禁：后端 341 + smoke 5 + ruff；前端 50 + lint/tsc/build。
 
 **坑位**：Playwright `page.request.patch` 不带 Content-Type 会 422（比 curl 严）；冒烟中改状态的步骤要在同轮内复位（幂等重置放开头+关键步后）。
+
+## 税号反查（2026-10-12）：「不知道税号怎么办」的产品内答案
+
+用户问「不知道税号怎么办」。传统路径（报关单/货代/网上查询）之外，加产品内反查：
+已导入提单里同行出口同类产品用的税号就是最真实答案。
+
+- 接口：`GET /api/hs/suggest?q=` —— raw_bills 品名 ILIKE 聚合 hs_code 计数（票数+样例描述，top 8）；空/短词 422（2 测试）
+- 前端：QuickStartForm 的 HS 输入下挂 HsSuggest 组件（品名预填、英文关键词提示、聚合列表点选回填、无结果指路「先导入提单/换英文词」）（4 测试）
+- 浏览器冒烟：填品名 → 查 COTTON TROUSERS → 列表 620462/12 票 → 点选回填输入框，截图 11
+- 门禁：后端 343 + ruff；前端 54 + lint/tsc/build
+- 坑位：label 内嵌其他组件会破坏 getByLabelText 关联——HsSuggest 移到 label 外；组件模板改后 import 插入的守卫条件被标签名短路（再次验证「模板改完必须 grep 落盘」）
