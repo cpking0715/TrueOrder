@@ -40,6 +40,7 @@
 | 通用邮箱标签 | `is_generic`，界面打标签、导出带列 | ✔ |
 | 未配置 Hunter Key | 走 fake 演示源，`source_ref` 带「fake-finder」标注可辨识；不排验证任务（verify_status 保持 unknown） | ✔ |
 | 域名发现（无官网按公司名查） | DEV-SPEC 3.6 与 1.4.1 的矛盾取舍：按 1.4.1 实现，同样受额度与审计约束 | 记录于 HANDOFF |
+| AI 增强提取（DeepSeek） | 仅官网联系页、每次抓取 ≤2 次、每日上限、provider=ai-extract 审计；提示词强制「原文出现、不推断」防幻觉；失败兜底正则结果 | ✔（2026-10-12 增补） |
 
 ## 第二期：发信相关（随发信功能一起落地）
 

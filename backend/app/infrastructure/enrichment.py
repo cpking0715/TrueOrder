@@ -241,9 +241,14 @@ def make_find_contacts_handler(
 
 
 def make_crawl_website_handler(
-    crawler: WebsiteCrawler | None = None, settings: Settings | None = None
+    crawler: WebsiteCrawler | None = None,
+    settings: Settings | None = None,
+    ai_extractor=None,
 ):
-    """抓企业自有官网公开页：robots/限速/SSRF 全约束，结果 source=website。"""
+    """抓企业自有官网公开页：robots/限速/SSRF 全约束，结果 source=website。
+
+    配置 AI Key 且当日未超上限时，爬虫附带 AI 联系人提取（联系页、失败兜底）。
+    """
 
     def handler(session: Session, payload: dict) -> None:
         company_id = int(payload["company_id"])
@@ -253,13 +258,34 @@ def make_crawl_website_handler(
         if not _website_usable(company):
             raise PermanentJobError("该企业没有已确认的官网，先填写并确认官网再抓取")
 
-        active_crawler = crawler or WebsiteCrawler()
+        cfg = settings or get_settings()
+        active_ai = ai_extractor
+        if active_ai is None and cfg.ai_api_key:
+            ai_used = sum(
+                1 for r in session.scalars(
+                    select(EnrichmentCallORM).where(
+                        EnrichmentCallORM.provider == "ai-extract",
+                        func.date(EnrichmentCallORM.called_at) == func.current_date(),
+                    )
+                )
+            )
+            if ai_used < cfg.ai_daily_cap:
+                from app.infrastructure.ai_extractor import make_ai_extractor
+
+                active_ai = make_ai_extractor(cfg)
+
+        active_crawler = crawler or WebsiteCrawler(ai_extractor=active_ai)
         try:
             result = active_crawler.crawl(company.website.strip())
         except CrawlBlocked as exc:
             raise PermanentJobError(f"官网抓取被拒：{exc}") from exc
         if result.blocked_reason:
             raise RuntimeError(result.blocked_reason)  # 首页失败可能瞬态，按可重试处理
+
+        if active_ai is not None and getattr(active_ai, "calls", 0):
+            SqlEnrichmentLog(session).record(
+                "ai-extract", company_id, credits_used=0
+            )  # AI 调用入审计（0 计量额度，日上限按 provider 计数）
 
         repo = SqlContactRepository(session)
         for c in result.contacts:
@@ -309,4 +335,4 @@ def build_registry(
         "find_contacts": make_find_contacts_handler(finder, settings, directory),
         "crawl_website": make_crawl_website_handler(crawler, settings),
         "verify_email": make_verify_email_handler(finder, settings),
-    }
+    }  # AI 提取器由 crawl handler 按 settings/日上限自行装配

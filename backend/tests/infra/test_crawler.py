@@ -165,3 +165,40 @@ class Test具名联系人:
         assert by_email["anna@example.com"].name == "Anna Kim"
         assert by_email["info@example.com"].name is None
         assert len(result.contacts) == 2
+
+
+class TestAI增强提取:
+    def test_爬虫合并AI结果并去重带来源(self, make_site):
+        from app.domain.entities import FoundContact as FC
+        from app.infrastructure.crawler import WebsiteCrawler
+
+        base = make_site({
+            "/": '<a href="/contact-us">Contact</a> info@reg.example',
+            "/contact-us": "Sales: Tom Brown <tom@reg.example>",
+        })
+
+        class AiStub:
+            def extract(self, page_text: str, url: str):
+                # 正则已抓到 tom@；AI 补一个正则抓不到的嵌套联系人
+                return [
+                    FC(name="Tom Brown", title="Sales", email="tom@reg.example"),
+                    FC(name="Jane Roe", title="Procurement", email="jane@reg.example"),
+                ]
+
+        result = WebsiteCrawler(allow_loopback=True, ai_extractor=AiStub()).crawl(f"{base}/")
+        by_email = {c.email: c for c in result.contacts}
+        assert by_email["jane@reg.example"].source_ref.startswith("website-ai:")
+        assert by_email["tom@reg.example"].source_ref.startswith("website:")  # 正则先到，AI 不覆盖
+
+    def test_爬虫AI失败兜底正则结果(self, make_site):
+        from app.infrastructure.crawler import WebsiteCrawler
+
+        base = make_site({"/": "info@ok.example", "/contact-us": "x@example.com"})
+
+        class AiBoom:
+            def extract(self, page_text: str, url: str):
+                raise RuntimeError("api down")
+
+        result = WebsiteCrawler(allow_loopback=True, ai_extractor=AiBoom()).crawl(f"{base}/")
+        assert "info@ok.example" in {c.email for c in result.contacts}
+

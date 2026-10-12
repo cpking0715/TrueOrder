@@ -9,6 +9,7 @@ from typing import Protocol
 from app.domain.entities import (
     CompanyFacts,
     FinderResult,
+    FoundContact,
     FoundWebsite,
     ProductConfig,
     ScoreResult,
@@ -63,3 +64,11 @@ class WebsiteDirectory(Protocol):
     def search(
         self, company_name: str, country: str
     ) -> FoundWebsite | None: ...
+
+
+class PageContactExtractor(Protocol):
+    """AI 页面联系人提取端口：从页面文本抽结构化联系人，失败由调用方兜底。"""
+
+    def extract(
+        self, page_text: str, url: str
+    ) -> list[FoundContact]: ...

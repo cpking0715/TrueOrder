@@ -412,3 +412,93 @@ class Test免费目录源集成:
         refreshed = session.get(CompanyORM, company.id)
         assert refreshed.website_confirmed is True
         assert refreshed.website_source == "finder"  # 计量路径写的，不是目录
+
+
+class TestAI提取集成:
+    """AI 增强提取：爬虫级合并去重 + handler 级装配（key/日上限/审计）。"""
+
+    def test_无key不装配AI工厂(self, session, company, queue, monkeypatch):
+        import app.infrastructure.ai_extractor as ai_mod
+
+        factory_called = []
+        monkeypatch.setattr(ai_mod, "make_ai_extractor", lambda s: factory_called.append(1))
+
+        company.website = "https://x.com"
+        company.website_confirmed = True
+        session.commit()
+
+        class CrawlerSpy:
+            def __init__(self, ai_extractor=None):
+                pass
+
+            def crawl(self, url):
+                from app.infrastructure.crawler import CrawlResult
+
+                return CrawlResult(pages_fetched=[url], blocked_reason="")
+
+        queue.enqueue("crawl_website", {"company_id": company.id})
+        # 显式覆盖 .env 带进来的真实 AI key
+        cfg_nokey = Settings(hunter_api_key="", ai_api_key="")
+        handler = make_crawl_website_handler(CrawlerSpy(), cfg_nokey)
+        Worker(queue, {"crawl_website": handler}).run_once(NOW)
+        assert factory_called == []  # 无 key：纯净路径
+
+    def test_有key装配且AI调用入审计(self, session, company, queue, monkeypatch):
+        from sqlalchemy import select as sel
+
+        import app.infrastructure.ai_extractor as ai_mod
+        from app.infrastructure.orm import EnrichmentCallORM
+
+        class FakeAi:
+            calls = 1  # 假设已调用一次
+
+        monkeypatch.setattr(ai_mod, "make_ai_extractor", lambda s: FakeAi())
+
+        company.website = "https://x.com"
+        company.website_confirmed = True
+        session.commit()
+
+        class CrawlerSpy:
+            def __init__(self, ai_extractor=None):
+                pass
+
+            def crawl(self, url):
+                from app.infrastructure.crawler import CrawlResult
+
+                return CrawlResult(pages_fetched=[url], blocked_reason="")
+
+        cfg = Settings(hunter_api_key="", ai_api_key="k")
+        queue.enqueue("crawl_website", {"company_id": company.id})
+        handler = make_crawl_website_handler(CrawlerSpy(), cfg)
+        Worker(queue, {"crawl_website": handler}).run_once(NOW)
+        rows = session.scalars(
+            sel(EnrichmentCallORM).where(EnrichmentCallORM.provider == "ai-extract")
+        ).all()
+        assert len(rows) == 1  # 调用过 AI → 审计一行
+
+    def test_AI日上限耗尽不装配(self, session, company, queue, monkeypatch):
+        import app.infrastructure.ai_extractor as ai_mod
+
+        factory_called = []
+        monkeypatch.setattr(ai_mod, "make_ai_extractor", lambda s: factory_called.append(1))
+
+        company.website = "https://x.com"
+        company.website_confirmed = True
+        session.commit()
+        SqlEnrichmentLog(session).record("ai-extract", company.id, credits_used=0)
+        session.commit()
+
+        class CrawlerSpy:
+            def __init__(self, ai_extractor=None):
+                pass
+
+            def crawl(self, url):
+                from app.infrastructure.crawler import CrawlResult
+
+                return CrawlResult(pages_fetched=[url], blocked_reason="")
+
+        cfg = Settings(hunter_api_key="", ai_api_key="k", ai_daily_cap=1)
+        queue.enqueue("crawl_website", {"company_id": company.id})
+        handler = make_crawl_website_handler(CrawlerSpy(), cfg)
+        Worker(queue, {"crawl_website": handler}).run_once(NOW)
+        assert factory_called == []

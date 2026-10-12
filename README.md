@@ -67,8 +67,9 @@ TRUEORDER_ENRICH_DAILY_CAP=20     # 按次补全每日上限（合规约束，�
 | Wikidata 目录 | 按公司名发现官网域名（偶得公开邮箱），高置信自动采用 | 免费、无 Key |
 | 官网抓取 | 已确认官网上的公开邮箱/电话（遵守 robots/限速/SSRF 防护） | 免费 |
 | Hunter | 按域名查联系人 + 邮箱验证（`TRUEORDER_HUNTER_API_KEY`，不配则用 fake 演示源） | 每日上限（默认 20） |
+| DeepSeek AI | 官网联系页的结构化提取增强（正则抓不到的嵌套联系人；`TRUEORDER_AI_API_KEY`，不配走纯正则） | 每次抓取 ≤2 次调用 + 每日上限（默认 200） |
 
-每次补全自动先走免费源，免费源没结果才消耗 Hunter 额度；全部调用记入 `enrichment_calls` 可审计。
+每次补全自动先走免费源，免费源没结果才消耗 Hunter 额度；全部调用（含 AI 提取）记入 `enrichment_calls` 可审计。
 
 ### 3. 前端（开发模式）
 

@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     hunter_api_key: str = ""
     # 按次补全每日调用上限（合规约束：禁止无人触发的全库自动补全）
     enrich_daily_cap: int = 20
+    # AI 增强提取（官网联系人结构化）：DeepSeek OpenAI 兼容接口
+    ai_api_key: str = ""
+    ai_base_url: str = "https://api.deepseek.com"
+    ai_model: str = "deepseek-flash"
+    ai_daily_cap: int = 200  # AI 调用每日上限（同样仅用户触发，记审计）
     # 样本声明：界面必须展示「非全量库」
     sample_notice: str = (
         "当前库内为公开样本数据（非全量样本）：仅用于演示产品页、打分与导出，"

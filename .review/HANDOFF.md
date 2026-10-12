@@ -544,3 +544,16 @@ Wikidata 免费优先落地后的两处配套缺口（均先红后绿）：
 
 前端 EnrichBar 文案同步：「将入队 N 家（其中约 M 家因额度可能延期到明日，免费源命中则不消耗额度）」。
 门禁：后端 292 + ruff 干净；前端 45 + lint/tsc/build 绿。
+
+## AI 增强提取：DeepSeek 接入（2026-10-12）
+
+用户提供 DeepSeek API Key（存 backend/.env，git 忽略；源码/测试零 key 字面量——测试用注入替身，Settings 显式覆盖 .env 防真实 key 泄入测试路径）：
+
+- **领域**（`domain/ai_extract.py` 纯函数 + 6 测试）：提示词强制「原文出现、不推断、不补全」（防幻觉：邮箱逐字符来自原文）；12k 文本截断；响应解析剥代码围栏/非法 JSON 归空/null 姓名归 None/去重
+- **端口**（ports.PageContactExtractor）+ **适配器**（ai_extractor.DeepSeekExtractor，OpenAI 兼容 chat/completions，HTTP 注入可测，temperature=0；make_ai_extractor 无 key 返回 None）
+- **爬虫接入**：仅 contact/about/team 页、每次抓取 ≤2 次 AI 调用、结果 source_ref 前缀 `website-ai:` 可溯源、与正则结果按邮箱去重（正则先到不覆盖）、AI 任何失败跳过该页兜底正则
+- **handler 装配**：配置 key 且当日 ai-extract 审计计数 < TRUEORDER_AI_DAILY_CAP（默认 200）才启用；调用入 enrichment_calls（provider=ai-extract，credits_used=0，独立于 Hunter 额度）
+- **真实联通验证**（1 次调用）：正确提取具名联系人+职位、通用邮箱 name=None、混淆格式 `(at)` 保守跳过
+- 测试 +11（领域 6 + 爬虫级 2 + handler 级 3：无 key 不装配/有 key 装配且审计/日上限耗尽不装配）
+
+门禁：后端 303 + smoke 5 + ruff 干净；前端 45 + lint/tsc/build 绿。

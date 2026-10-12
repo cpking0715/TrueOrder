@@ -88,11 +88,16 @@ class _PinnedBackend(httpcore._backends.sync.SyncBackend):  # noqa: SLF001 - htt
 
 
 class WebsiteCrawler:
-    def __init__(self, allow_loopback: bool = False) -> None:
-        """allow_loopback 仅供本地测试夹具使用（生产默认拒绝回环地址）。"""
+    def __init__(self, allow_loopback: bool = False, ai_extractor=None) -> None:
+        """allow_loopback 仅供本地测试夹具使用（生产默认拒绝回环地址）。
+
+        ai_extractor：可选的页面联系人 AI 提取器（DeepSeek 端口实现），
+        只处理联系页、失败兜底正则结果。
+        """
         self._allow_loopback = allow_loopback
         self._last_hit: dict[str, float] = {}
         self._pinned: dict[str, str] = {}  # host -> 已校验 IP（DNS 钉扎）
+        self._ai_extractor = ai_extractor
 
     def crawl(self, base_url: str) -> CrawlResult:
         parsed = urlparse(base_url)
@@ -107,6 +112,7 @@ class WebsiteCrawler:
         result = CrawlResult()
         emails: dict[str, str] = {}  # email -> 首次出现的页面 URL
         named: list[FoundContact] = []  # 具名联系人（姓名+职位猜测），优先于裸邮箱
+        page_texts: list[tuple[str, str]] = []  # (url, html) 留给 AI 提取（只存联系页）
 
         def fetch_and_harvest(url: str) -> str | None:
             html = self._fetch_text(url)
@@ -123,6 +129,8 @@ class WebsiteCrawler:
                     )
             for email in extract_emails(html):
                 emails.setdefault(email, url)
+            if any(t in url.lower() for t in ("contact", "about", "team")):
+                page_texts.append((url, html[:16000]))
             return html
 
         first_html = fetch_and_harvest(base_url)
@@ -141,6 +149,23 @@ class WebsiteCrawler:
             if email.lower() not in named_emails
         ]
         result.contacts = named + bare
+
+        # AI 增强提取：只跑联系页，失败/无 key 不影响正则结果
+        if self._ai_extractor is not None and page_texts:
+            existing = {c.email.lower() for c in result.contacts}
+            for url, text in page_texts[:2]:  # 每次抓取最多 2 次 AI 调用
+                try:
+                    for c in self._ai_extractor.extract(text, url):
+                        if c.email.lower() not in existing:
+                            existing.add(c.email.lower())
+                            result.contacts.append(
+                                FoundContact(
+                                    name=c.name, title=c.title, email=c.email,
+                                    phone=c.phone, source_ref=f"website-ai:{url}",
+                                )
+                            )
+                except Exception:  # noqa: BLE001 - AI 是增强：任何失败跳过该页
+                    continue
         return result
 
     def _respect_robots(self, parsed) -> None:
