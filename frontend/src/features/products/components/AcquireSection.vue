@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import type { CompanyDetail } from "@/api/products";
+import type { Opportunity } from "@/api/opportunities";
+import FollowUpSection from "../../pipeline/components/FollowUpSection.vue";
 import ContactsPanel from "./ContactsPanel.vue";
 import WebsiteField from "./WebsiteField.vue";
 
-defineProps<{ company: CompanyDetail["company"] }>();
-const emit = defineEmits<{ confirmed: [] }>();
+defineProps<{ company: CompanyDetail["company"]; opportunity?: Opportunity | null }>();
+const emit = defineEmits<{ confirmed: []; changed: [] }>();
 </script>
 
 <template>
@@ -20,4 +22,9 @@ const emit = defineEmits<{ confirmed: [] }>();
   <section id="drawer-contacts">
     <ContactsPanel :company-id="company.company_id" />
   </section>
+  <FollowUpSection
+    v-if="opportunity"
+    :opportunity="opportunity"
+    @changed="emit('changed')"
+  />
 </template>

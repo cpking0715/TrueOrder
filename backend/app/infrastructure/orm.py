@@ -256,3 +256,67 @@ class EnrichmentCallORM(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     ok: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class OpportunityORM(Base):
+    """商机（WP2）：产品 × 企业的跟进管道，阶段机见 domain.pipeline。"""
+
+    __tablename__ = "opportunities"
+    __table_args__ = (
+        UniqueConstraint("product_id", "company_id", name="uq_opportunity_product_company"),
+        CheckConstraint(
+            "stage IN ('lead','contacted','replied','sample_quote','negotiating',"
+            "'won_intent','lost')",
+            name="ck_opportunities_stage",
+        ),
+        CheckConstraint(
+            "intent IN ('cold','warm','hot')", name="ck_opportunities_intent"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
+    )
+    company_id: Mapped[int] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), index=True
+    )
+    stage: Mapped[str] = mapped_column(String(16), default="lead")
+    intent: Mapped[str] = mapped_column(String(8), default="cold")
+    next_follow_up_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    owner_note: Mapped[str] = mapped_column(Text, default="")
+    closed_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class ActivityORM(Base):
+    """跟进活动（WP2）：只追加，不修改不删除（删除联系人时 contact_id 置空）。"""
+
+    __tablename__ = "activities"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('email_out','email_in','call','whatsapp','note','stage_change')",
+            name="ck_activities_kind",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    opportunity_id: Mapped[int] = mapped_column(
+        ForeignKey("opportunities.id", ondelete="CASCADE"), index=True
+    )
+    contact_id: Mapped[int | None] = mapped_column(
+        ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True
+    )
+    kind: Mapped[str] = mapped_column(String(16))
+    summary: Mapped[str] = mapped_column(Text, default="")
+    body: Mapped[str] = mapped_column(Text, default="")
+    intent_after: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    email_message_id: Mapped[str | None] = mapped_column(Text, nullable=True)

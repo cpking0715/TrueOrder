@@ -14,6 +14,16 @@ import {
   type CompanyDetail,
   type Product,
 } from "@/api/products";
+import { createOpportunity, fetchOpportunities } from "@/api/opportunities";
+
+vi.mock("@/api/opportunities", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/api/opportunities")>();
+  return {
+    ...actual,
+    fetchOpportunities: vi.fn(),
+    createOpportunity: vi.fn(),
+  };
+});
 
 vi.mock("@/api/products", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/api/products")>();
@@ -154,6 +164,7 @@ async function renderViewWithRouter() {
 }
 
 beforeEach(() => {
+  vi.mocked(fetchOpportunities).mockResolvedValue([]);
   vi.mocked(fetchMeta).mockResolvedValue({
     sample_mode: true,
     sample_notice: "当前库内为公开样本数据（非全量样本）。",
@@ -222,6 +233,30 @@ describe("产品详情页（用户可见结果）", () => {
     await renderView();
     await screen.findByText("女士棉质长裤（成衣）");
     expect(screen.queryByTestId("no-bills-hint")).toBeNull();
+  });
+
+  it("加入跟进调用商机接口并刷新为阶段徽章", async () => {
+    vi.mocked(createOpportunity).mockResolvedValue({
+      opportunity_id: 1, product_id: 1, company_id: 11, company_name: "LONE STAR",
+      stage: "lead", intent: "cold", next_follow_up_on: null, owner_note: "",
+      closed_reason: null,
+    });
+    vi.mocked(fetchOpportunities)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([{
+        opportunity_id: 1, product_id: 1, company_id: 11, company_name: "LONE STAR",
+        stage: "lead", intent: "cold", next_follow_up_on: null, owner_note: "",
+        closed_reason: null,
+      }]);
+    await renderView();
+    await screen.findByText("LONE STAR CLOTHING CO");
+    await fireEvent.click(screen.getByTestId("follow-up-11"));
+    await waitFor(() => {
+      expect(createOpportunity).toHaveBeenCalledWith(1, 11);
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("buyers-table").textContent).toContain("线索");
+    });
   });
 
   it("点击公司行打开抽屉：票数、最近到港、供货方、理由与提单", async () => {

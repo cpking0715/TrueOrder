@@ -11,8 +11,9 @@ const props = defineProps<{
   companyId: number | null;
   productId: number;
   audience?: string;
+  opportunity?: import("@/api/opportunities").Opportunity | null;
 }>();
-const emit = defineEmits<{ close: [] }>();
+const emit = defineEmits<{ close: []; opportunityChanged: [] }>();
 
 const { detail, loading, error, score, reload } = useCompanyDrawer(
   () => props.companyId,
@@ -137,7 +138,9 @@ function backToReasons() {
 
         <AcquireSection
           :company="detail.company"
+          :opportunity="opportunity"
           @confirmed="reload"
+          @changed="emit('opportunityChanged')"
         />
       </template>
     </aside>

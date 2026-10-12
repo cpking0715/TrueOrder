@@ -12,6 +12,11 @@ import {
   type Meta,
   type Product,
 } from "@/api/products";
+import {
+  createOpportunity,
+  fetchOpportunities,
+  type Opportunity,
+} from "@/api/opportunities";
 import { useBuyerFilters } from "../composables/useBuyerFilters";
 import ProductHeader from "../components/ProductHeader.vue";
 import BuyerTabs from "../components/BuyerTabs.vue";
@@ -36,6 +41,31 @@ const contactsExportUrl = computed(() => {
   return `/api/products/${route.params.id}/contacts/export.csv${search}`;
 });
 const error = ref("");
+const opportunities = ref<Opportunity[]>([]);
+
+const followStages = computed(() =>
+  Object.fromEntries(opportunities.value.map((o) => [o.company_id, o.stage])),
+);
+const selectedOpportunity = computed(
+  () => opportunities.value.find((o) => o.company_id === selectedCompanyId.value) ?? null,
+);
+
+async function reloadOpportunities() {
+  try {
+    opportunities.value = await fetchOpportunities({ product_id: productId.value });
+  } catch {
+    opportunities.value = [];
+  }
+}
+
+async function onFollowUp(buyer: { company_id: number }) {
+  try {
+    await createOpportunity(productId.value, buyer.company_id);
+    await reloadOpportunities();
+  } catch (e) {
+    error.value = `加入跟进失败：${(e as Error).message}`;
+  }
+}
 
 const product = computed(
   () => products.value.find((p) => p.product_id === productId.value) ?? null,
@@ -103,6 +133,7 @@ onMounted(async () => {
     fetchMeta().catch(() => null),
     fetchProducts(),
   ]);
+  void reloadOpportunities();
   meta.value = metaResult;
   products.value = productsResult;
   const current = product.value;
@@ -119,6 +150,7 @@ watch(productId, () => {
     audience.value = current.buyer_type;
   }
   result.value = null;
+  void reloadOpportunities();
   loadBuyers();
 });
 
@@ -183,7 +215,9 @@ watch(
     <BuyerTable
       :buyers="result?.items ?? ([] as Buyer[])"
       :loading="loading"
+      :follow-stages="followStages"
       @select="selectedCompanyId = $event.company_id"
+      @follow-up="onFollowUp"
     />
     <p
       v-if="result && result.items.length < result.total"
@@ -234,6 +268,8 @@ watch(
     :company-id="selectedCompanyId"
     :product-id="productId"
     :audience="audience"
+    :opportunity="selectedOpportunity"
     @close="selectedCompanyId = null"
+    @opportunity-changed="reloadOpportunities"
   />
 </template>

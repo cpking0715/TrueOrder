@@ -557,3 +557,20 @@ Wikidata 免费优先落地后的两处配套缺口（均先红后绿）：
 - 测试 +11（领域 6 + 爬虫级 2 + handler 级 3：无 key 不装配/有 key 装配且审计/日上限耗尽不装配）
 
 门禁：后端 303 + smoke 5 + ruff 干净；前端 45 + lint/tsc/build 绿。
+
+## WP2 商机管道与跟进（2026-10-12，第二期启动）
+
+按 DEV-SPEC 3.3 交付：
+
+| 层 | 交付 | 测试 |
+| --- | --- | --- |
+| 领域 | `pipeline.py`：有序阶段机（lead→…→won_intent，lost 终态）；允许跳级、任意→lost 须原因、lost→lead 重开清原因、won_intent 只进 lost；自动推进钩子（首封邮件 lead→contacted、回信 contacted→replied，供 WP5 挂接）；到期判断 | 18 条 |
+| 表 | `opportunities`（UNIQUE 产品×企业、stage/intent CHECK、closed_reason）+ `activities`（六类 CHECK、只追加）；迁移 fcaacfb8b462 | 一致性绿（旧库模拟同步剥两表） |
+| 仓储 | 加入幂等（存在返回既有）；阶段变更自动写 stage_change 活动；活动回写意愿；到期过滤（非终态且 ≤ 今天）；时间线倒序 | 12 条 |
+| 接口 | POST /api/opportunities（幂等 201）、GET（stage/product/due=today）、PATCH（422 锁非法转换与缺原因）、activities、timeline | 8 条 |
+| 前端 | 买家表「跟进」列（按钮/阶段徽章）；#/pipeline 看板（六列卡片+下拉换阶段+流失原因内联+今日待跟进横幅+已流失区重开）；公司抽屉「跟进」区（阶段/下次跟进日/记录活动带意愿/时间线）——FollowUpSection+TimelineList，AcquireSection 透传；顶栏「跟进」导航 | +5（看板 3 + 跟进区 1 + 详情页加入跟进链路 1），前端共 50 |
+
+浏览器冒烟（Playwright 实录）：看板分列+待跟进横幅 → 换阶段 → 空流失原因被拒/填后入已流失 → 重开 → 精准页签阶段徽章 → 抽屉跟进区时间线与记活动。截图 10-wp2-pipeline.png。演示数据：BROOKLYN（重点跟进）、NINGBO WEAR（已联系+电话活动+今日到期）。
+门禁：后端 341 + smoke 5 + ruff；前端 50 + lint/tsc/build。
+
+**坑位**：Playwright `page.request.patch` 不带 Content-Type 会 422（比 curl 严）；冒烟中改状态的步骤要在同轮内复位（幂等重置放开头+关键步后）。

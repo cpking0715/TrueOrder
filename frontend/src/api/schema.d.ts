@@ -350,10 +350,120 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/opportunities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Opportunities */
+        get: operations["list_opportunities_api_opportunities_get"];
+        put?: never;
+        /**
+         * Create Opportunity
+         * @description 从买家列表「加入跟进」：已存在直接返回既有（幂等）。
+         */
+        post: operations["create_opportunity_api_opportunities_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/opportunities/{opportunity_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Opportunity */
+        patch: operations["update_opportunity_api_opportunities__opportunity_id__patch"];
+        trace?: never;
+    };
+    "/api/opportunities/{opportunity_id}/activities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Activity */
+        post: operations["add_activity_api_opportunities__opportunity_id__activities_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/opportunities/{opportunity_id}/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Timeline */
+        get: operations["timeline_api_opportunities__opportunity_id__timeline_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** ActivityCreateIn */
+        ActivityCreateIn: {
+            /** Kind */
+            kind: string;
+            /** Summary */
+            summary: string;
+            /**
+             * Body
+             * @default
+             */
+            body: string;
+            /** Contact Id */
+            contact_id?: number | null;
+            /** Intent After */
+            intent_after?: string | null;
+        };
+        /** ActivityOut */
+        ActivityOut: {
+            /** Activity Id */
+            activity_id: number;
+            /** Opportunity Id */
+            opportunity_id: number;
+            /** Contact Id */
+            contact_id?: number | null;
+            /** Kind */
+            kind: string;
+            /** Summary */
+            summary: string;
+            /**
+             * Body
+             * @default
+             */
+            body: string;
+            /** Intent After */
+            intent_after?: string | null;
+            /** Occurred At */
+            occurred_at: string;
+        };
         /** Body_import_bills_csv_api_bills_import_post */
         Body_import_bills_csv_api_bills_import_post: {
             /** File */
@@ -802,6 +912,55 @@ export interface components {
             sample_mode: boolean;
             /** Sample Notice */
             sample_notice: string;
+        };
+        /** OpportunityCreateIn */
+        OpportunityCreateIn: {
+            /** Product Id */
+            product_id: number;
+            /** Company Id */
+            company_id: number;
+            /**
+             * Owner Note
+             * @default
+             */
+            owner_note: string;
+        };
+        /** OpportunityOut */
+        OpportunityOut: {
+            /** Opportunity Id */
+            opportunity_id: number;
+            /** Product Id */
+            product_id: number;
+            /** Company Id */
+            company_id: number;
+            /** Company Name */
+            company_name: string;
+            /** Stage */
+            stage: string;
+            /** Intent */
+            intent: string;
+            /** Next Follow Up On */
+            next_follow_up_on?: string | null;
+            /**
+             * Owner Note
+             * @default
+             */
+            owner_note: string;
+            /** Closed Reason */
+            closed_reason?: string | null;
+        };
+        /** OpportunityUpdateIn */
+        OpportunityUpdateIn: {
+            /** Stage */
+            stage?: string | null;
+            /** Closed Reason */
+            closed_reason?: string | null;
+            /** Intent */
+            intent?: string | null;
+            /** Next Follow Up On */
+            next_follow_up_on?: string | null;
+            /** Owner Note */
+            owner_note?: string | null;
         };
         /**
          * ProductCreateIn
@@ -1568,6 +1727,173 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EnrichExecutedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_opportunities_api_opportunities_get: {
+        parameters: {
+            query?: {
+                product_id?: number | null;
+                stage?: string | null;
+                due?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpportunityOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_opportunity_api_opportunities_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpportunityCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpportunityOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_opportunity_api_opportunities__opportunity_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpportunityUpdateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpportunityOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_activity_api_opportunities__opportunity_id__activities_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActivityCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    timeline_api_opportunities__opportunity_id__timeline_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityOut"][];
                 };
             };
             /** @description Validation Error */

@@ -109,6 +109,8 @@ class Test迁移:
         engine = create_engine(MIG_URL)
         Base.metadata.create_all(engine)
         with engine.begin() as conn:  # 剥掉 WP1/WP3 新增对象 = 模拟历史版本的库
+            conn.execute(text("DROP TABLE activities"))
+            conn.execute(text("DROP TABLE opportunities"))
             conn.execute(text("DROP TABLE jobs"))
             conn.execute(text("DROP TABLE enrichment_calls"))
             conn.execute(text("ALTER TABLE companies DROP COLUMN website_source"))
@@ -145,6 +147,8 @@ class Test旧库接管:
         Base.metadata.create_all(engine)
         with engine.begin() as conn:
             # 剥掉 WP1/WP3 新增对象与表达式索引 = 模拟迁移前的历史库
+            conn.execute(text("DROP TABLE activities"))
+            conn.execute(text("DROP TABLE opportunities"))
             conn.execute(text("DROP TABLE jobs"))
             conn.execute(text("DROP TABLE enrichment_calls"))
             conn.execute(text("ALTER TABLE companies DROP COLUMN website_source"))

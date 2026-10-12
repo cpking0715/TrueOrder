@@ -12,6 +12,12 @@ import { RouterLink, RouterView } from "vue-router";
     </RouterLink>
     <nav class="topnav">
       <RouterLink
+        to="/pipeline"
+        class="topnav-link"
+      >
+        跟进
+      </RouterLink>
+      <RouterLink
         to="/jobs"
         class="topnav-link"
       >
