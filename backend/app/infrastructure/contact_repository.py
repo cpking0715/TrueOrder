@@ -80,6 +80,7 @@ class ExportContactRow:
     source_ref: str
     acquired_at: datetime
     website: str | None
+    website_confidence: str = ""
 
 
 class SqlContactRepository:
@@ -289,7 +290,7 @@ class SqlContactRepository:
         if not unique_ids:
             return []
         stmt = (
-            select(ContactORM, CompanyORM.website)
+            select(ContactORM, CompanyORM.website, CompanyORM.website_confidence)
             .join(CompanyORM, ContactORM.company_id == CompanyORM.id)
             .where(ContactORM.company_id.in_(unique_ids))
             .order_by(ContactORM.company_id, ContactORM.id)
@@ -299,7 +300,7 @@ class SqlContactRepository:
         if not include_invalid:
             stmt = stmt.where(ContactORM.verify_status.notin_(["invalid", "bounced"]))
         result: list[tuple[int, ExportContactRow]] = []
-        for contact, website in self._session.execute(stmt):
+        for contact, website, website_confidence in self._session.execute(stmt):
             result.append(
                 (
                     contact.company_id,
@@ -314,6 +315,7 @@ class SqlContactRepository:
                         source_ref=contact.source_ref or "",
                         acquired_at=contact.acquired_at,
                         website=website,
+                        website_confidence=website_confidence or "",
                     ),
                 )
             )

@@ -107,15 +107,26 @@ class Test批量补全:
         pending = client.get("/api/jobs", params={"status": "pending"}).json()["total"]
         assert pending == 0
 
-    def test_confirm入队并受剩余额度截断(self, client):
-        product_id = self.seed_product_with_buyers(client)
-        body = client.post(
-            f"/api/products/{product_id}/buyers/enrich",
-            json={"limit": 5, "confirm": True},
-        ).json()
-        assert body["enqueued"] >= 1
-        assert body["enqueued"] == len(body["job_ids"])
-        assert body["credits_needed"] == body["enqueued"] + body["capped_by_quota"]
+    def test_confirm入队全部不按额度截断(self, client):
+        """免费目录源优先后，截断过度保守：全部入队，计量不足执行期延期（QuotaDeferred）。"""
+        from app.core.config import Settings, get_settings
+
+        client.app.dependency_overrides[get_settings] = lambda: Settings(enrich_daily_cap=1)
+        try:
+            product_id = self.seed_product_with_buyers(client)
+            body = client.post(
+                f"/api/products/{product_id}/buyers/enrich",
+                json={"limit": 5, "confirm": True},
+            ).json()
+            assert body["enqueued"] == body["candidates"]  # 低额度也不截断入队
+            assert body["enqueued"] == len(body["job_ids"])
+            # credits_needed 现为「最坏情况计量数」；capped_by_quota 为信息性预计延期数
+            assert body["credits_needed"] == body["enqueued"]
+            assert body["capped_by_quota"] == max(
+                body["enqueued"] + body["used_today"] - body["daily_cap"], 0
+            )
+        finally:
+            client.app.dependency_overrides.pop(get_settings, None)
 
     def test_已有联系人的公司被跳过(self, client):
         product_id = self.seed_product_with_buyers(client)
@@ -133,3 +144,48 @@ class Test批量补全:
             json={"limit": 50, "confirm": False},
         ).json()
         assert body["skipped_has_contacts"] >= 1
+
+
+class Test导出官网置信度:
+    def test_导出联系人填官网置信度列(self, client):
+        from pathlib import Path
+
+        from app.infrastructure.orm import CompanyORM
+        from app.interface.deps import get_session
+
+        seed = Path(__file__).resolve().parents[2] / "app" / "seed"
+        client.post(
+            "/api/products/import",
+            files={"file": ("p.csv", (seed / "products.csv").read_text("utf-8-sig"), "text/csv")},
+        )
+        client.post(
+            "/api/bills/import",
+            files={
+                "file": ("b.csv", (seed / "sample_bills.csv").read_text("utf-8-sig"), "text/csv")
+            },
+            data={"as_of": "2026-10-09"},
+        )
+        session = next(client.app.dependency_overrides[get_session]())
+        garment = next(
+            p for p in client.get("/api/products").json() if p["code"] == "P-GARMENT"
+        )
+        pid = garment["product_id"]
+        top = client.get(
+            f"/api/products/{pid}/buyers", params={"tier": "precise"}
+        ).json()["items"][0]
+        company = session.get(CompanyORM, top["company_id"])
+        company.website = "https://example.com"
+        company.website_confidence = "high"
+        session.commit()
+        client.post(
+            f"/api/companies/{top['company_id']}/contacts",
+            json={"name": "带置信度", "title": "", "email": "conf@example.com"},
+        )
+
+        export = client.get(f"/api/products/{pid}/contacts/export.csv")
+        header = export.text.splitlines()[0]
+        assert "官网置信度" in header
+        assert any(
+            line.endswith(",https://example.com,high") or ",high" in line
+            for line in export.text.splitlines()[1:]
+        ), export.text[:500]

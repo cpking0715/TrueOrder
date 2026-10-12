@@ -61,20 +61,21 @@ describe("EnrichBar 批量补全", () => {
     expect(enrichBuyers).toHaveBeenLastCalledWith(1, expect.objectContaining({ confirm: true }));
   });
 
-  it("额度耗尽（截断后今日可执行 0）确认按钮禁用且文案区分", async () => {
+  it("额度耗尽仍可确认入队，文案讲延期而非截断", async () => {
     vi.mocked(fetchEnrichUsage).mockResolvedValue({
       provider: "fake", configured: false, daily_cap: 20, used_today: 20, remaining: 0,
     });
     vi.mocked(enrichBuyers).mockResolvedValueOnce({
       candidates: 5, skipped_has_contacts: 0, skipped_queried_recently: 0,
-      capped_by_quota: 5, credits_needed: 0, daily_cap: 20, used_today: 20,
+      capped_by_quota: 5, credits_needed: 5, daily_cap: 20, used_today: 20,
       enqueued: 0, job_ids: [],
     });
     render(EnrichBar, { props: { productId: 1, query: {} } });
     await fireEvent.click(screen.getByTestId("enrich-estimate"));
     const text = await screen.findByTestId("enrich-estimate-text");
-    expect(text.textContent).toContain("今日可执行 0 家");
-    expect((screen.getByTestId("enrich-confirm") as HTMLButtonElement).disabled).toBe(true);
+    expect(text.textContent).toContain("延期到明日");
+    expect(text.textContent).toContain("免费源命中则不消耗");
+    expect((screen.getByTestId("enrich-confirm") as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("估计为 0 时确认按钮禁用", async () => {

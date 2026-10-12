@@ -231,7 +231,7 @@ def export_contacts(
                     sanitize_csv_cell(contact.source_ref),
                     sanitize_csv_cell(contact.acquired_at.strftime("%Y-%m-%d")),
                     sanitize_csv_cell(contact.website or ""),
-                    "",
+                    sanitize_csv_cell(contact.website_confidence or ""),
                 ]
             )
 

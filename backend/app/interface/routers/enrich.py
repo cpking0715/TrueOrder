@@ -156,15 +156,16 @@ def enrich_buyers(
 
     used = log.calls_today()
     remaining = max(settings.enrich_daily_cap - used, 0)
-    capped = max(len(eligible) - remaining, 0)
-    to_run = eligible[:remaining]
 
+    # 免费目录源优先：全部入队不按计量额度截断——任务执行时先走免费路径，
+    # 真正需要计量且额度不足的由 QuotaDeferred 延期到明日（不失败）。
+    # capped_by_quota/credits_needed 为信息性最坏估计，供确认框展示。
     estimate = EnrichEstimateOut(
         candidates=len(eligible),
         skipped_has_contacts=sum(1 for b in candidates if b.company_id in has_contacts),
         skipped_queried_recently=sum(1 for b in candidates if b.company_id in queried),
-        capped_by_quota=capped,
-        credits_needed=len(to_run),
+        capped_by_quota=max(len(eligible) - remaining, 0),
+        credits_needed=len(eligible),
         daily_cap=settings.enrich_daily_cap,
         used_today=used,
     )
@@ -172,6 +173,6 @@ def enrich_buyers(
         return estimate
 
     queue = SqlJobQueue(session)
-    job_ids = [queue.enqueue("find_contacts", {"company_id": b.company_id}) for b in to_run]
+    job_ids = [queue.enqueue("find_contacts", {"company_id": b.company_id}) for b in eligible]
     executed = EnrichExecutedOut(**estimate.__dict__, enqueued=len(job_ids), job_ids=job_ids)
     return executed

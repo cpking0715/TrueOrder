@@ -38,7 +38,7 @@ const estimateText = computed(() => {
   if (!e) return "";
   const parts = [
     e.capped_by_quota > 0
-      ? `今日可执行 ${e.credits_needed} 家（另有 ${e.capped_by_quota} 家额度不足，明日自动排）`
+      ? `将入队 ${e.credits_needed} 家（其中约 ${e.capped_by_quota} 家因额度可能延期到明日，免费源命中则不消耗额度）`
       : `可补全 ${e.candidates} 家`,
     e.skipped_has_contacts ? `已有联系人跳过 ${e.skipped_has_contacts}` : "",
     e.skipped_queried_recently ? `近期查过跳过 ${e.skipped_queried_recently}` : "",
