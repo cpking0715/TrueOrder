@@ -41,6 +41,9 @@ onMounted(async () => {
   />
   <div class="panel">
     <h1>填你的产品，找对应客户</h1>
+    <p class="eyebrow">
+      01 填产品 · 02 看名单 · 03 补联系方式 · 04 导出 CSV
+    </p>
     <p class="muted">
       填产品名称与 HS 税号，系统立即在已导入的提单库中匹配潜在客户与精准客户。
       提单数据来自你上传的授权 CSV（用下方数据导入面板）。
@@ -56,7 +59,8 @@ onMounted(async () => {
     </h2>
     <p
       v-if="error"
-      class="badge excluded"
+      class="error small"
+      role="alert"
     >
       {{ error }}
     </p>

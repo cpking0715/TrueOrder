@@ -130,7 +130,7 @@ async function submit() {
     </div>
     <p
       v-if="error"
-      class="badge excluded"
+      class="error small"
       role="alert"
     >
       {{ error }}

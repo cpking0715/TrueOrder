@@ -18,7 +18,7 @@ const contacts = ref<Contact[]>([]);
 const error = ref("");
 const adding = ref(false);
 const enqueued = ref("");
-const busy = ref(false);
+const busyMethod = ref<"finder" | "website" | null>(null);
 
 async function reload() {
   error.value = "";
@@ -33,14 +33,14 @@ onMounted(reload);
 async function findContacts(method: "finder" | "website") {
   error.value = "";
   enqueued.value = "";
-  busy.value = true;
+  busyMethod.value = method;
   try {
     const { job_id } = await requestFindContacts(props.companyId, method);
-    enqueued.value = `已加入任务队列（#${job_id}），worker 执行后回到这里查看。可在「任务」页跟踪进度。`;
+    enqueued.value = `已加入任务队列（#${job_id}），worker 执行后回到这里查看。`;
   } catch (e) {
     error.value = (e as Error).message;
   } finally {
-    busy.value = false;
+    busyMethod.value = null;
   }
 }
 
@@ -73,9 +73,6 @@ async function toggleDnc(contact: Contact) {
 }
 
 async function remove(contact: Contact) {
-  if (!window.confirm(`删除联系人「${contact.name ?? contact.email ?? contact.contact_id}」？`)) {
-    return;
-  }
   try {
     await deleteContact(contact.contact_id);
     await reload();
@@ -90,16 +87,21 @@ async function remove(contact: Contact) {
     class="contacts-panel"
     data-testid="contacts-panel"
   >
-    <h3>
-      联系人（{{ contacts.length }}）
-      <ContactsActions
-        :busy="busy"
-        :adding="adding"
-        @find="findContacts('finder')"
-        @crawl="findContacts('website')"
-        @add="adding = true"
-      />
-    </h3>
+    <div class="contacts-head">
+      <h3>联系人（{{ contacts.length }}）</h3>
+      <div class="actions">
+        <ContactsActions
+          :busy-method="busyMethod"
+          :adding="adding"
+          @find="findContacts('finder')"
+          @crawl="findContacts('website')"
+          @add="adding = true"
+        />
+      </div>
+    </div>
+    <p class="small muted">
+      补全消耗每日额度 · 抓取官网免费
+    </p>
     <p
       v-if="enqueued"
       class="small muted"
@@ -109,7 +111,8 @@ async function remove(contact: Contact) {
     </p>
     <p
       v-if="error"
-      class="error"
+      class="error small"
+      role="alert"
       data-testid="contacts-error"
     >
       {{ error }}
@@ -137,7 +140,7 @@ async function remove(contact: Contact) {
       v-else
       class="muted small"
     >
-      暂无联系人
+      暂无联系人——用上方「补全联系人」（消耗每日额度）或「抓取官网」（免费）查找，或手动新增。
     </p>
   </section>
 </template>

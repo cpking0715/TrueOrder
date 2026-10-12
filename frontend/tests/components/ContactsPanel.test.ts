@@ -68,7 +68,7 @@ describe("ContactsPanel", () => {
       .mockResolvedValueOnce([contactFixture()]);
     vi.mocked(createContact).mockResolvedValue(contactFixture());
     render(ContactsPanel, { props: { companyId: 10 } });
-    await screen.findByText("暂无联系人");
+    await screen.findByText(/暂无联系人/);
     await fireEvent.click(screen.getByTestId("add-contact"));
     await fireEvent.update(screen.getByTestId("contact-name"), "John Smith");
     await fireEvent.update(screen.getByTestId("contact-email"), "john@example.com");
@@ -90,12 +90,14 @@ describe("ContactsPanel", () => {
       expect(updateContact).toHaveBeenCalledWith(1, { do_not_contact: true }));
   });
 
-  it("删除需确认且调用删除接口", async () => {
+  it("删除需行内二次确认：首点仅武装，再点才调接口", async () => {
     vi.mocked(fetchContacts).mockResolvedValue([contactFixture()]);
     vi.mocked(deleteContact).mockResolvedValue(undefined);
-    window.confirm = vi.fn(() => true);
     render(ContactsPanel, { props: { companyId: 10 } });
     await screen.findByTestId("contact-row-1");
+    await fireEvent.click(screen.getByTestId("delete-contact-1"));
+    expect(deleteContact).not.toHaveBeenCalled();  // 首点只武装
+    expect(screen.getByText("确认删除？")).toBeTruthy();
     await fireEvent.click(screen.getByTestId("delete-contact-1"));
     await waitFor(() => expect(deleteContact).toHaveBeenCalledWith(1));
   });

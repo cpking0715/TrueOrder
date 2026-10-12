@@ -504,3 +504,27 @@ country=US（高置信可自动采用）。测试 +12（具名 5 + 爬虫具名 
 已改用字节级替换修复；后续正则一律走 Edit 工具或 chr(92) 构造。
 
 门禁：后端 291 + smoke 5 + ruff 干净；前端 45 + lint/build 绿。
+
+## 前端设计走查第二轮（2026-10-12）
+
+基准截图复拍 → 走查（cursor-agent 三次调度均被信任墙/空输出阻断，改用本地只读子代理执行同 brief，产出 18 条：1 P1 + 10 P2 + 7 P3，全部采纳；另有自查 2 条：h3 语义污染、抽屉 902px 长度）：
+
+| 编号 | 要点 | 处理 |
+| --- | --- | --- |
+| D1[P1] 500 票长表压底、无页内导航 | 粘性抽屉头（公司名+四锚点+关闭）；分区 id+scroll-margin；提单默认渲染前 50 票 +「显示全部」；表区 60vh 独立滚动 + 粘性表头；chip 定位自动展开目标行 | 新组件 DrawerHead/BillsSection |
+| D2 动作三段竖排、琥珀误用为告警色 | EnrichBar 与双导出并入 .detail-actions 同排；enrichbar 左轨改海关青；导出按钮进 .actions |  |
+| D3 首页不讲四步漏斗 | h1 下加 mono 步骤轨（01 填产品 · 02 看名单 · 03 补联系方式 · 04 导出） |  |
+| D4 错误两套体系 | 统一 p.error.small role=alert（badge excluded 只留短状态码）；抽屉加载失败内嵌 error |  |
+| D5 联系人四徽章过载 | unknown 不渲染徽章；来源并入正文 muted；验证状态按语义色 |  |
+| D6 空态不指引 | 联系人空态指路（补全/抓取/新增）；买家空态提示换页签/放宽筛选 |  |
+| D7 移动端断点误伤 | input-narrow 不参与整宽；website-field 移动端块状 |  |
+| D8 定位后丢上下文 | 粘性表头 + 「↑ 返回得分理由」浮链与高亮同步 |  |
+| D9 两段式整块替换 | 第 2 步保留「前 N 家 · 重新预估」；第 1 步 eyebrow；aria-live 播报 |  |
+| D10 操作挤在 h3 | 拆 .contacts-head（标题/操作分列，含自查 h3 语义修复）；额度代价常驻提示；busy 分按钮文案 | ContactsActions 改 busyMethod |
+| D11 抽屉无障碍 | aria-modal；开锁 body 滚动；关闭焦点回归触发行 |  |
+| D12-D18 P3 | BillTable scoped 残留删除；badge.info 中性色给 running；任务页去运维命令；「任务页」文案变链接；h3 入系统；company-summary 分隔线；删除改行内二次确认（3s 超时） |  |
+
+结构：CompanyDrawer 拆 DrawerHead/BillsSection/AcquireSection + useCompanyDrawer composable（146 行，取数/竞态守卫与 UI 分离）。
+
+**过程坑（记录）**：① 字符串替换改模板时一次静默未命中（contacts-head 替换没生效），界面「看起来改完了」但 DOM 没有——靠 Playwright 探针定位；教训：模板替换后必须 grep 验证落盘。② cursor-agent 信任墙+空输出三连，子代理替代可行且产出质量高。
+复审：Playwright 6 项全过（漏斗/动作区/粘性头锚点/锁滚动+焦点回归/h3 语义）。门禁：前端 45 + lint/tsc/build；后端 smoke 5。

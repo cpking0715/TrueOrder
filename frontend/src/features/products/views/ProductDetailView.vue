@@ -175,7 +175,8 @@ watch(
     />
     <p
       v-if="error"
-      class="badge excluded"
+      class="error small"
+      role="alert"
     >
       {{ error }}
     </p>
@@ -191,35 +192,37 @@ watch(
     >
       已显示前 {{ result.items.length }} 家（共 {{ result.total }} 家），导出 CSV 含全部筛选结果。
     </p>
-    <EnrichBar
-      :product-id="productId"
-      :query="{
-        tier: filters.state.value.tier,
-        q: filters.state.value.q,
-        country: filters.state.value.country,
-        minShipments: filters.state.value.minShipments,
-      }"
-    />
-    <p class="stack-top">
-      <a
-        class="btn primary"
-        :href="filters.exportUrl.value"
-        download
-        data-testid="export-button"
-        title="导出当前筛选的全部结果（不受列表显示条数限制）"
-      >
-        导出买家 CSV（全部）
-      </a>
-      <a
-        class="btn"
-        :href="contactsExportUrl"
-        download
-        data-testid="export-contacts-button"
-        title="按当前筛选导出联系人（默认排除不再联系与无效邮箱）"
-      >
-        导出联系人 CSV
-      </a>
-    </p>
+    <div class="detail-actions">
+      <EnrichBar
+        :product-id="productId"
+        :query="{
+          tier: filters.state.value.tier,
+          q: filters.state.value.q,
+          country: filters.state.value.country,
+          minShipments: filters.state.value.minShipments,
+        }"
+      />
+      <span class="actions">
+        <a
+          class="btn primary"
+          :href="filters.exportUrl.value"
+          download
+          data-testid="export-button"
+          title="导出当前筛选的全部结果（不受列表显示条数限制）"
+        >
+          导出买家 CSV
+        </a>
+        <a
+          class="btn"
+          :href="contactsExportUrl"
+          download
+          data-testid="export-contacts-button"
+          title="按当前筛选导出联系人（默认排除不再联系与无效邮箱）"
+        >
+          导出联系人 CSV
+        </a>
+      </span>
+    </div>
   </div>
   <div
     v-else

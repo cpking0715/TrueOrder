@@ -24,7 +24,7 @@ function reasonPreview(buyer: Buyer): string {
     class="empty"
     data-testid="buyers-empty"
   >
-    当前筛选下没有公司。
+    当前筛选下没有公司——换个页签或放宽筛选试试。
   </div>
   <div
     v-else

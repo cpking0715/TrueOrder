@@ -57,9 +57,3 @@ defineProps<{ bills: CompanyDetail["bills"]; highlightId: number | null }>();
   </table>
 </template>
 
-<style scoped>
-tr.highlighted {
-  background: var(--accent-soft);
-  outline: 2px solid var(--accent);
-}
-</style>

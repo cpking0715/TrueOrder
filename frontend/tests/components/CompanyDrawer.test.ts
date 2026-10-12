@@ -76,12 +76,15 @@ describe("CompanyDrawer 在途响应竞态（F4 复审）", () => {
     // 关闭后立刻打开 B
     await rerender({ companyId: null, productId: 1 });
     await rerender({ companyId: 2, productId: 1 });
-    expect(await screen.findByText("BBB LLC")).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getAllByText("BBB LLC").length).toBeGreaterThanOrEqual(1);
+    });
 
     // A 的响应此刻才返回：不允许覆盖 B
     releaseA?.();
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(screen.getByTestId("company-drawer").textContent).toContain("BBB LLC");
-    expect(screen.queryByText("AAA LLC")).toBeNull();
+    const drawerText = screen.getByTestId("company-drawer").textContent ?? "";
+    expect(drawerText).toContain("BBB LLC");
+    expect(drawerText).not.toContain("AAA LLC");
   });
 });

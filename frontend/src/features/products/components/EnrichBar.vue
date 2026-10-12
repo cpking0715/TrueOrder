@@ -9,7 +9,7 @@ const limit = ref(10);
 const busy = ref(false);
 const error = ref("");
 const estimate = ref<EnrichEstimate | null>(null);
-const executed = ref("");
+const executedCount = ref(0);
 const usage = ref<string>("");
 
 function buildRequest(confirm: boolean) {
@@ -48,7 +48,7 @@ const estimateText = computed(() => {
 
 async function askEstimate() {
   error.value = "";
-  executed.value = "";
+  executedCount.value = 0;
   busy.value = true;
   try {
     estimate.value = await enrichBuyers(props.productId, buildRequest(false));
@@ -64,9 +64,10 @@ async function confirmRun() {
   busy.value = true;
   try {
     const result = await enrichBuyers(props.productId, buildRequest(true));
-    executed.value = `已入队 ${result.enqueued} 家（任务页可跟踪进度），worker 执行后打开公司抽屉查看联系人。`;
+    executedCount.value = result.enqueued ?? 0;
     estimate.value = null;
     void loadUsageHint();
+
   } catch (e) {
     error.value = (e as Error).message;
   } finally {
@@ -75,6 +76,7 @@ async function confirmRun() {
 }
 
 void loadUsageHint();
+
 </script>
 
 <template>
@@ -83,6 +85,7 @@ void loadUsageHint();
     data-testid="enrich-bar"
   >
     <template v-if="!estimate">
+      <span class="eyebrow">第 1 步 · 选择范围</span>
       <label class="small">
         补全当前筛选前
         <input
@@ -104,15 +107,22 @@ void loadUsageHint();
         {{ busy ? "预估中…" : "预估额度" }}
       </button>
       <span
-        v-if="executed"
+        v-if="executedCount > 0"
         class="small muted"
         data-testid="enrich-executed"
-      >{{ executed }}</span>
+      >已入队 {{ executedCount }} 家——在<a href="#/jobs">任务页</a>跟踪进度，worker 执行后打开公司抽屉查看联系人。</span>
     </template>
     <template v-else>
       <span class="eyebrow">第 2 步 · 确认消耗额度</span>
+      <span class="small muted">前 {{ limit }} 家 · <a
+        href="#"
+        class="marine-link"
+        @click.prevent="estimate = null"
+      >重新预估</a></span>
       <span
         class="small"
+        role="status"
+        aria-live="polite"
         data-testid="enrich-estimate-text"
       >{{ estimateText }}</span>
       <button

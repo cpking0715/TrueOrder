@@ -11,6 +11,19 @@ const emit = defineEmits<{
 }>();
 
 const editing = ref(false);
+const deleteArmed = ref(false);
+let disarmTimer: ReturnType<typeof setTimeout> | undefined;
+
+function armDelete() {
+  if (deleteArmed.value) {
+    emit("delete");
+    deleteArmed.value = false;
+    return;
+  }
+  deleteArmed.value = true;
+  clearTimeout(disarmTimer);
+  disarmTimer = setTimeout(() => (deleteArmed.value = false), 3000);
+}
 
 const verifyLabel: Record<string, string> = {
   unknown: "未验证",
@@ -52,8 +65,11 @@ const verifyLabel: Record<string, string> = {
           class="badge warn"
           data-testid="dnc-badge"
         >不再联系</span>
-        <span class="badge muted">{{ verifyLabel[contact.verify_status] ?? contact.verify_status }}</span>
-        <span class="badge muted">来源：{{ contact.source }}</span>
+        <span
+          v-if="contact.verify_status !== 'unknown'"
+          class="badge"
+          :class="contact.verify_status === 'valid' ? 'precise' : contact.verify_status === 'bounced' ? 'excluded' : 'warn'"
+        >{{ verifyLabel[contact.verify_status] ?? contact.verify_status }}</span>
       </div>
       <div class="actions">
         <button
@@ -72,9 +88,11 @@ const verifyLabel: Record<string, string> = {
         <button
           class="small ghost"
           :data-testid="`delete-contact-${contact.contact_id}`"
-          @click="emit('delete')"
+          :class="deleteArmed ? 'danger-armed' : ''"
+          :title="deleteArmed ? '再点一次确认删除（3 秒后自动取消）' : '删除该联系人'"
+          @click="armDelete"
         >
-          删除
+          {{ deleteArmed ? "确认删除？" : "删除" }}
         </button>
       </div>
     </template>

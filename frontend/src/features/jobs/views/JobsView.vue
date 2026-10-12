@@ -58,7 +58,7 @@ onBeforeUnmount(() => {
       任务状态
     </h1>
     <p class="muted small">
-      后台任务由 worker 进程执行（uv run python -m app.worker）；本页只读，每 10 秒自动刷新。
+      后台任务由 worker 进程执行，本页只读，每 10 秒自动刷新。
     </p>
     <div
       class="tabs"
@@ -83,7 +83,7 @@ onBeforeUnmount(() => {
     </div>
     <p
       v-if="error"
-      class="badge excluded"
+      class="error small"
       role="alert"
     >
       {{ error }}
@@ -125,7 +125,7 @@ onBeforeUnmount(() => {
             </td>
             <td>{{ KIND_LABEL[job.kind] ?? job.kind }}</td>
             <td>
-              <span :class="['badge', job.status === 'done' ? 'precise' : job.status === 'failed' ? 'excluded' : job.status === 'running' ? 'importer' : 'potential']">
+              <span :class="['badge', job.status === 'done' ? 'precise' : job.status === 'failed' ? 'excluded' : job.status === 'running' ? 'info' : 'muted']">
                 {{ STATUS_FILTERS.find((f) => f.value === job.status)?.label ?? job.status }}
               </span>
             </td>
