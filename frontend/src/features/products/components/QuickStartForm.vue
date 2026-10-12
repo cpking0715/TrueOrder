@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { createProduct, type Product } from "@/api/products";
+import AutoHsChip from "./AutoHsChip.vue";
 import HsSuggest from "./HsSuggest.vue";
-
+import { useAutoHs } from "../composables/useAutoHs";
 const emit = defineEmits<{ created: [product: Product] }>();
 
 const name = ref("");
@@ -12,6 +13,8 @@ const buyerKeywords = ref("");
 const peerKeywords = ref("");
 const error = ref("");
 const submitting = ref(false);
+
+const { autoHs, busy: autoHsBusy, accept: acceptAutoHs } = useAutoHs(name, hsCode);
 
 const AUDIENCE_OPTIONS = [
   { value: "importer", label: "海外进口商/批发商（卖成品的）" },
@@ -24,16 +27,12 @@ const DEFAULT_KEYWORDS: Record<string, string> = {
   factory: "MANUFACTUR;MILL;FACTORY;INDUSTRIES",
 };
 const keywordPlaceholder = computed(() => {
-  if (buyerType.value === "both") {
-    return `留空自动使用：${DEFAULT_KEYWORDS.importer};${DEFAULT_KEYWORDS.factory}`;
-  }
-  return `留空自动使用：${DEFAULT_KEYWORDS[buyerType.value]}`;
+  const d = DEFAULT_KEYWORDS;
+  return buyerType.value === "both" ? `留空自动使用：${d.importer};${d.factory}` : `留空自动使用：${d[buyerType.value]}`;
 });
 
 function splitKeywords(text: string): string[] {
-  return [...new Set(
-    text.replace(/[,，]/g, ";").split(";").map((kw) => kw.trim().toUpperCase()).filter(Boolean),
-  )];
+  return [...new Set(text.replace(/[,，]/g, ";").split(";").map((kw) => kw.trim().toUpperCase()).filter(Boolean))];
 }
 
 async function submit() {
@@ -43,7 +42,7 @@ async function submit() {
     return;
   }
   const hs = hsCode.value.trim();
-  // 与后端 is_valid_hs 对齐：6-10 位纯数字，且前 6 位不得全零（0000001 也是误码）
+  // 对齐后端 is_valid_hs
   if (!/^\d{6,10}$/.test(hs) || hs.slice(0, 6) === "000000") {
     error.value = "税号需为 6-10 位数字（不能全零），如 620462";
     return;
@@ -68,11 +67,7 @@ async function submit() {
 </script>
 
 <template>
-  <form
-    class="quickstart"
-    data-testid="quickstart-form"
-    @submit.prevent="submit"
-  >
+  <form class="quickstart" data-testid="quickstart-form" @submit.prevent="submit">
     <div class="strip">
       <span class="strip-code">Manifest Search</span>
       <span class="strip-title">授权提单库检索</span>
@@ -94,6 +89,12 @@ async function submit() {
           placeholder="620462"
           data-testid="quickstart-hs"
         >
+        <AutoHsChip
+          :auto-hs="autoHs"
+          :busy="autoHsBusy"
+          :show="!hsCode"
+          @accept="acceptAutoHs"
+        />
       </label>
       <HsSuggest
         :initial-keyword="name"

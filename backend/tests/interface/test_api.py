@@ -480,3 +480,17 @@ class Test税号反查:
         assert client.get("/api/hs/suggest", params={"q": "TROUSERS"}).json().__len__() >= 1
         assert client.get("/api/hs/suggest", params={"q": "  "}).status_code == 422
         assert client.get("/api/hs/suggest", params={"q": "不存在的品名xyz"}).json() == []
+
+
+class Test税号自动推荐:
+    def test_品名自动推荐返回税号(self, client):
+        seed_via_api(client)
+        r = client.post("/api/hs/auto", json={"name": "女士棉质长裤"})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["hs_code"]  # 6 位数字
+        assert len(body["hs_code"]) >= 6
+        assert body["source"] in ("ai", "ai+confirmed")
+
+    def test_空品名422(self, client):
+        assert client.post("/api/hs/auto", json={"name": ""}).status_code == 422

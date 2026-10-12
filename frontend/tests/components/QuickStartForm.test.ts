@@ -103,3 +103,33 @@ describe("QuickStartForm 提交", () => {
     expect(emitted().created).toBeUndefined();
   });
 });
+
+describe("QuickStartForm 税号自动推荐", () => {
+  it("品名填后 HS 空时显示推荐 chip 并点击填入", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ hs_code: "620462", source: "ai+confirmed", bill_count: 12 }),
+    }));
+    const { unmount } = render(QuickStartForm);
+    await fireEvent.update(screen.getByLabelText("产品名称"), "女士棉质长裤");
+    // debounce 800ms 后出现 chip
+    await new Promise((r) => setTimeout(r, 1200));
+    const chip = await screen.findByTestId("hs-auto-chip");
+    expect(chip.textContent).toContain("620462");
+    expect(chip.textContent).toContain("12 票");
+    await fireEvent.click(chip);
+    expect((screen.getByTestId("quickstart-hs") as HTMLInputElement).value).toBe("620462");
+    unmount();
+    vi.unstubAllGlobals();
+  });
+
+  it("HS 已填时不显示推荐", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    render(QuickStartForm);
+    await fireEvent.update(screen.getByLabelText("产品名称"), "某产品");
+    await fireEvent.update(screen.getByLabelText("HS 税号"), "620462");
+    await new Promise((r) => setTimeout(r, 1200));
+    expect(screen.queryByTestId("hs-auto-chip")).toBeNull();
+    vi.unstubAllGlobals();
+  });
+});
