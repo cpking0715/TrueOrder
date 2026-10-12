@@ -57,10 +57,10 @@ describe("PipelineView 看板", () => {
       opp({ opportunity_id: 2, company_name: "PACIFIC FASHION", stage: "replied" }),
     ]);
     render(PipelineView);
-    expect(await screen.findByText("BROOKLYN APPAREL LLC")).toBeTruthy();
+    expect(await screen.findByTestId("card-1")).toBeTruthy();
     expect(screen.getByTestId("col-lead").textContent).toContain("BROOKLYN APPAREL");
     expect(screen.getByTestId("col-replied").textContent).toContain("PACIFIC FASHION");
-    expect(screen.getByText("线索（1）")).toBeTruthy();
+    expect(screen.getByTestId("col-lead").textContent).toContain("1");  // 列计数
   });
 
   it("今日待跟进横幅只含到期商机", async () => {
@@ -76,25 +76,31 @@ describe("PipelineView 看板", () => {
     expect(banner.textContent).not.toContain("FUTURE CO");
   });
 
-  it("换阶段调 PATCH 并刷新；选流失先要原因", async () => {
+  it("推进按钮调 PATCH 下一阶段；流失按钮展开原因表单", async () => {
     vi.mocked(fetchOpportunities)
       .mockResolvedValueOnce([opp()])
       .mockResolvedValue([opp({ stage: "contacted" })]);
     vi.mocked(patchOpportunity).mockResolvedValue(opp({ stage: "contacted" }));
     render(PipelineView);
-    await screen.findByText("BROOKLYN APPAREL LLC");
-    const select = screen.getByTestId("stage-1");
-    await fireEvent.update(select, "contacted");
+    await screen.findByTestId("card-1");
+
+    // 点推进 → PATCH contacted（lead 的下一阶段）
+    const advanceBtn = screen.getByTestId("card-1").querySelector("button[title*='推进']");
+    expect(advanceBtn).toBeTruthy();
+    await fireEvent.click(advanceBtn!);
     await waitFor(() => {
       expect(patchOpportunity).toHaveBeenCalledWith(1, { stage: "contacted" });
     });
 
-    // 选流失：出现原因输入，空原因报错
-    await fireEvent.update(select, "lost");
-    expect(await screen.findByTestId("lost-reason")).toBeTruthy();
-    await fireEvent.click(screen.getByText("确认流失"));
-    expect(await screen.findByText("流失必须填写原因")).toBeTruthy();
+    // 点流失 → 展开原因表单，空原因确认按钮禁用
+    const lostBtn = screen.getByTestId("card-1").querySelector("button[title*='流失']");
+    expect(lostBtn).toBeTruthy();
+    await fireEvent.click(lostBtn!);
+    expect(await screen.findByTestId("lost-form")).toBeTruthy();
+    const confirmBtn = screen.getByText("确认流失");
+    expect((confirmBtn as HTMLButtonElement).disabled).toBe(true);
     await fireEvent.update(screen.getByTestId("lost-reason"), "无回复");
+    expect((screen.getByText("确认流失") as HTMLButtonElement).disabled).toBe(false);
     vi.mocked(patchOpportunity).mockClear();
     await fireEvent.click(screen.getByText("确认流失"));
     await waitFor(() => {
