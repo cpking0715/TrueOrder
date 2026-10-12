@@ -178,7 +178,8 @@ class ContactORM(Base):
             postgresql_where=text("email IS NOT NULL"),
         ),
         CheckConstraint(
-            "source IN ('manual','csv','finder','website')", name="ck_contacts_source"
+            "source IN ('manual','csv','finder','website','wikidata')",
+            name="ck_contacts_source",
         ),
         CheckConstraint(
             "verify_status IN ('unknown','valid','invalid','bounced')",

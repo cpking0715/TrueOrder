@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 from app.domain.jobs import Job
 from app.infrastructure.jobs import SqlJobQueue, Worker
 
-NOW = datetime(2026, 10, 10, 12, 0, 0, tzinfo=UTC)
+# 动态基准时间（略超前）：入队默认 run_after=now()，固定日期会在跨天后让任务永不到期
+NOW = datetime.now(UTC) + timedelta(hours=1)  # 余量放大：全量套件运行数十秒，5 秒会过期
 
 
 @pytest.fixture()

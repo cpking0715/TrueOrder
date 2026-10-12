@@ -152,3 +152,14 @@ class FinderResult:
     domain_company_name: str | None = None
     domain_country: str | None = None
     contacts: tuple[FoundContact, ...] = ()
+
+
+@dataclass(frozen=True)
+class FoundWebsite:
+    """免费目录源（如 Wikidata）按公司名找到的官网。不消耗按次额度。"""
+
+    website: str
+    matched_name: str  # 目录源里的实体名（判置信度）
+    country: str  # 目录源声明的国家（ISO2，未知为空）
+    source: str = "wikidata"
+    email: str = ""  # 目录源偶得的公开联系邮箱（如 Wikidata P968），可为空

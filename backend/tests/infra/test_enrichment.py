@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy.orm import Session
@@ -18,7 +18,8 @@ from app.infrastructure.enrichment import (
 from app.infrastructure.jobs import SqlJobQueue, Worker
 from app.infrastructure.orm import CompanyORM
 
-NOW = datetime(2026, 10, 10, 12, 0, 0, tzinfo=UTC)
+# 动态基准时间（略超前）：入队默认 run_after=now()，固定日期会在跨天后让任务永不到期
+NOW = datetime.now(UTC) + timedelta(hours=1)  # 余量放大：全量套件运行数十秒，5 秒会过期
 CFG = Settings(hunter_api_key="")
 
 
@@ -324,3 +325,90 @@ class Test审阅修复轮WP4:
             Worker(queue, {"find_contacts": handler}).run_once(NOW)
         assert len(finder.calls) == 1, "成功外呼过 30 天内不得重复调用补全服务"
         assert len(contacts_of(session, company.id)) == 1
+
+
+class FakeDirectory:
+    def __init__(self, found) -> None:
+        self._found = found
+        self.calls: list[tuple[str, str]] = []
+
+    def search(self, company_name: str, country: str):
+        self.calls.append((company_name, country))
+        return self._found
+
+
+class Test免费目录源集成:
+    """Wikidata 免费路径：命中即不烧计量额度；未命中回落计量路径。"""
+
+    def test_高置信命中_官网自动采用且仅计量一次(self, session, company, queue):
+        from sqlalchemy import select as sel
+
+        from app.domain.entities import FoundWebsite
+        from app.infrastructure.orm import EnrichmentCallORM
+
+        finder = FakeFinder(FinderResult(contacts=(FoundContact(email="john@x.com"),)))
+        directory = FakeDirectory(FoundWebsite(
+            website="https://brooklynapparel.example",
+            matched_name="Brooklyn Apparel LLC",
+            country="US",
+            email="info@brooklynapparel.example",
+        ))
+        queue.enqueue("find_contacts", {"company_id": company.id})
+        handler = make_find_contacts_handler(finder, CFG, directory=directory)
+        Worker(queue, {"find_contacts": handler}).run_once(NOW)
+
+        session.expire_all()
+        refreshed = session.get(CompanyORM, company.id)
+        assert refreshed.website == "https://brooklynapparel.example"
+        assert refreshed.website_source == "wikidata"  # noqa: E501
+        assert refreshed.website_confidence == "high"
+        assert refreshed.website_confirmed is True
+        # 目录源以公司名查询；计量 finder 以采纳后的域名查联系人
+        assert directory.calls == [("Brooklyn Apparel LLC", "US")]
+        assert finder.calls == ["brooklynapparel.example"]
+        contacts = contacts_of(session, company.id)
+        emails = {c.email for c in contacts}
+        assert emails == {"john@x.com", "info@brooklynapparel.example"}  # 计量 + 目录免费邮箱
+        sources = {c.email: c.source for c in contacts}
+        assert sources["info@brooklynapparel.example"] == "wikidata"
+        # 审计：wikidata 0 额度 + 计量 1 额度
+        rows = session.scalars(sel(EnrichmentCallORM).order_by(EnrichmentCallORM.id)).all()
+        assert [(r.provider, r.credits_used) for r in rows] == [("wikidata", 0), ("fake", 1)]
+
+    def test_中低置信只写候选不进计量路径(self, session, company, queue):
+        from sqlalchemy import select as sel
+
+        from app.domain.entities import FoundWebsite
+        from app.infrastructure.orm import EnrichmentCallORM
+
+        finder = FakeFinder(FinderResult(contacts=(FoundContact(email="a@b.com"),)))
+        directory = FakeDirectory(FoundWebsite(
+            website="https://maybe.example", matched_name="Other Corp", country="US",
+        ))
+        queue.enqueue("find_contacts", {"company_id": company.id})
+        handler = make_find_contacts_handler(finder, CFG, directory=directory)
+        Worker(queue, {"find_contacts": handler}).run_once(NOW)
+
+        session.expire_all()
+        refreshed = session.get(CompanyORM, company.id)
+        assert refreshed.website == "https://maybe.example"
+        assert refreshed.website_confirmed is False  # 候选等人工确认
+        assert finder.calls == []  # 计量 finder 未被调用
+        rows = session.scalars(sel(EnrichmentCallORM)).all()
+        assert [(r.provider, r.credits_used) for r in rows] == [("wikidata", 0)]
+        assert contacts_of(session, company.id) == []
+
+    def test_目录未命中回落计量路径(self, session, company, queue):
+        finder = FakeFinder(
+            FinderResult(domain="brooklynapparel.com", domain_company_name="Brooklyn Apparel LLC",
+                         domain_country="US", contacts=(FoundContact(email="f@x.com"),))
+        )
+        directory = FakeDirectory(None)
+        queue.enqueue("find_contacts", {"company_id": company.id})
+        handler = make_find_contacts_handler(finder, CFG, directory=directory)
+        Worker(queue, {"find_contacts": handler}).run_once(NOW)
+        assert finder.calls == [""]  # 无官网：计量发现按公司名（domain 传空）
+        session.expire_all()
+        refreshed = session.get(CompanyORM, company.id)
+        assert refreshed.website_confirmed is True
+        assert refreshed.website_source == "finder"  # 计量路径写的，不是目录

@@ -20,10 +20,11 @@ from app.infrastructure.jobs import Handler, SqlJobQueue, Worker
 
 
 def build_handlers() -> dict[str, Handler]:
-    """WP4 处理器注册表；第二期再挂 send_email / poll_imap。"""
+    """处理器注册表：免费目录源（Wikidata 域名发现）+ 计量 finder + 官网抓取。"""
     from app.infrastructure.enrichment import build_registry
+    from app.infrastructure.website_directory import WikidataDirectory
 
-    return build_registry()
+    return build_registry(directory=WikidataDirectory())
 
 
 def run_loop(

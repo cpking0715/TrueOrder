@@ -469,3 +469,16 @@ verdict：**F1-F4 全部 verified**（复审通过读 fastapi 0.143 源码确认
 | D16[P3] 琥珀对比度存疑 | **实测通过** | #8a5a00 on #faf0d7 = 5.22 ≥ 4.5（AA），不改 |
 
 门禁：前端 **45 passed**（+1 键盘测试）+ eslint/vue-tsc/build 全绿；Playwright 程序化复审 5 项全过（D1/D3/D4/D10/D13）。教训：这轮暴露 WP1 会话组件从未做过视觉集成验证——「组件测试绿」≠「长对了」，基准截图+走查应成为每个 WP 前端交付的门禁。
+
+## 免费信息源扩展：Wikidata 域名发现（2026-10-12）
+
+用户定调「主诉求=获取信息和联系方式，有用就集成、扩更多源」。按 GoodJob 2.0 参考（docs/goodjob-2-reference.md）落地第一个免费源：
+
+- **领域**：`FoundWebsite` 实体 + `WebsiteDirectory` 端口（免费官网目录源，与计量 ContactFinder 分离）
+- **基础设施**：`website_directory.WikidataDirectory`——wbsearchentities 按公司名搜实体（规范化名称完全对齐才采用），P856 取官网、P17 取国家（Q-id→ISO2 映射覆盖 37 个主要贸易国）、P968 偶得公开邮箱；礼貌延迟 0.5s；网络错误按未命中吞并不上抛；HTTP 注入可测（6 条单测零外网）
+- **处理器免费优先**：find_contacts 无官网时先问目录源（**0 额度**，审计 credits_used=0）；高置信自动采用→commit 后写偶得邮箱→继续计量查联系人；中低置信只写候选（不进计量路径）；未命中回落原计量路径。迁移 b52d4c6e8a13：contacts.source 增加 'wikidata'（此前 CHECK 只认 manual/csv/finder/website，首版被 IntegrityError→rollback 冲掉官网写入，靠探针定位）
+- **接线**：worker 默认挂真实 WikidataDirectory；测试/冒烟 registry 保持离线（build_registry directory 默认 None）；usage 端点 provider 文案更新
+- **测试坑位（重要）**：infra 测试的模块级固定 `NOW` 在跨天后让任务永不过期（run_after=入队真实时刻 > 固定 NOW）→ 改 `now()+1h` 动态基准；且余量必须大于全量套件运行时长（首版 +5s 在合跑时过期）
+- **真实联通验证**：dev 库造 Apple Inc → 真实 worker 链路 → job done，官网候选 `https://apple.com/at/`（source=wikidata，medium 候选等确认，零额度）。已知限制：P856 多值时取首条可能是区域站（apple.com/at），后续可按「非区域路径优先」改进
+
+门禁：后端 **279 passed + smoke 5** + ruff 干净；前端 45 + lint/build 绿。测试增长：目录 6 + 处理器目录集成 3。

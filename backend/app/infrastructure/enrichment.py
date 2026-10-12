@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.domain.contacts import website_confidence
 from app.domain.ports import ContactFinder as ContactFinderProtocol
+from app.domain.ports import WebsiteDirectory as WebsiteDirectoryProtocol
 from app.infrastructure.contact_finders import make_finder
 from app.infrastructure.contact_repository import SqlContactRepository
 from app.infrastructure.crawler import CrawlBlocked, WebsiteCrawler
@@ -118,10 +119,19 @@ def _website_usable(company: CompanyORM) -> bool:
     return bool(company.website_confirmed) or company.website_confidence == "high"
 
 
+def _normalize_website_url(raw: str) -> str:
+    website = (raw or "").strip()
+    if website and "://" not in website:
+        website = f"https://{website}"  # 入库规范化为绝对 URL（F9）
+    return website
+
+
 def make_find_contacts_handler(
-    finder: ContactFinderProtocol | None = None, settings: Settings | None = None
+    finder: ContactFinderProtocol | None = None,
+    settings: Settings | None = None,
+    directory: WebsiteDirectoryProtocol | None = None,
 ):
-    """按官网域名查联系人：额度检查 → finder 查询 → 域名候选回写 → 联系人入库 → 排验证。"""
+    """补全联系人：免费目录源（官网发现）优先，计量 finder 兜底/查联系人。"""
 
     def handler(session: Session, payload: dict) -> None:
         company_id = int(payload["company_id"])
@@ -135,6 +145,36 @@ def make_find_contacts_handler(
         if company_id in log.companies_queried_within([company_id]):
             return
 
+        had_usable = _website_usable(company)
+
+        # 免费目录源（如 Wikidata）：仅域名发现，不占计量额度；
+        # 高置信自动采用并继续查联系人，中低置信只写候选等人工确认。
+        if not had_usable and directory is not None:
+            found = directory.search(_company_display_name(company), company.country)
+            if found is not None:
+                confidence = website_confidence(
+                    found.matched_name,
+                    company.normalized_name,
+                    found.country,
+                    company.country,
+                )
+                company.website = _normalize_website_url(found.website)
+                company.website_source = found.source
+                company.website_confidence = confidence
+                session.flush()
+                log.record(found.source, company_id, credits_used=0)
+                if confidence != "high":
+                    session.commit()  # 候选落库即止，不进计量路径
+                    return
+                company.website_confirmed = True  # 自动采用
+                had_usable = True
+                session.commit()  # 采纳先落库：后续邮箱写入失败不再冲掉官网
+                if found.email:  # 目录源偶得的公开邮箱（如 P968）直接入库
+                    SqlContactRepository(session).add(
+                        company_id, name=None, title="", email=found.email,
+                        phone=None, source=found.source, source_ref=f"{found.source}:P968",
+                    )
+
         # F3 额度原子预留：先记账（advisory lock）再外呼；额度是日滚动资源，
         # 用尽 → 延期到明日（F4），不是失败。
         provider = "hunter" if cfg.hunter_api_key else "fake"
@@ -145,9 +185,7 @@ def make_find_contacts_handler(
                 f"今日补全额度已用尽（上限 {cfg.enrich_daily_cap}），延期到明日重跑",
             )
 
-        # 域名发现（3.7 第 1 条）：无官网/官网未确认时仍可按公司名查域名；
-        # 高置信自动采用并继续查联系人，中低置信只写候选等人工确认。
-        had_usable = _website_usable(company)
+        # 计量 finder：有官网按域名查联系人；无官网做域名发现（3.7 第 1 条）。
         website_raw = (company.website or "").strip()
         active_finder = finder or make_finder(cfg)
         result = active_finder.find(
@@ -164,10 +202,7 @@ def make_find_contacts_handler(
                 result.domain_country or "",
                 company.country,
             )
-            website = result.domain.strip()
-            if website and "://" not in website:
-                website = f"https://{website}"  # 入库规范化为绝对 URL（F9）
-            company.website = website
+            company.website = _normalize_website_url(result.domain)
             company.website_source = "finder"
             company.website_confidence = confidence
             if confidence == "high":
@@ -264,10 +299,14 @@ def build_registry(
     settings: Settings | None = None,
     finder: ContactFinderProtocol | None = None,
     crawler: WebsiteCrawler | None = None,
+    directory: WebsiteDirectoryProtocol | None = None,
 ) -> dict:
-    """worker 与 API 共用的处理器注册表（finder/crawler 可注入测试替身）。"""
+    """worker 与 API 共用的处理器注册表（finder/crawler/directory 可注入替身）。
+
+    directory 默认 None：测试（含冒烟）保持离线；生产由 worker 显式接线真实目录源。
+    """
     return {
-        "find_contacts": make_find_contacts_handler(finder, settings),
+        "find_contacts": make_find_contacts_handler(finder, settings, directory),
         "crawl_website": make_crawl_website_handler(crawler, settings),
         "verify_email": make_verify_email_handler(finder, settings),
     }

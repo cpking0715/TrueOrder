@@ -103,7 +103,8 @@ def enrichment_usage(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ):
-    provider = "hunter" if settings.hunter_api_key else "fake（未配置 Hunter Key）"
+    metered = "hunter" if settings.hunter_api_key else "fake（未配置 Hunter Key 的演示源）"
+    provider = f"wikidata（免费域名发现）+ {metered}"
     used = SqlEnrichmentLog(session).calls_today()
     return {
         "provider": provider,

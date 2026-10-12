@@ -6,7 +6,13 @@ from collections.abc import Sequence
 from datetime import date
 from typing import Protocol
 
-from app.domain.entities import CompanyFacts, FinderResult, ProductConfig, ScoreResult
+from app.domain.entities import (
+    CompanyFacts,
+    FinderResult,
+    FoundWebsite,
+    ProductConfig,
+    ScoreResult,
+)
 
 
 class ProductReader(Protocol):
@@ -43,7 +49,17 @@ class CompanyImportSink(Protocol):
 class ContactFinder(Protocol):
     """按次联系人补全端口（hunter/fake 适配器可整体替换）。"""
 
-    def find(self, domain: str, company_name: str, company_country: str = "") -> FinderResult: ...
+    def find(
+        self, domain: str, company_name: str, company_country: str = ""
+    ) -> FinderResult: ...
 
     def verify(self, email: str) -> str:
         """返回 valid | invalid | unknown（不可判定时 unknown）。"""
+
+
+class WebsiteDirectory(Protocol):
+    """免费官网目录源：按公司名找官网域名，零额度、结果带来源可审计。"""
+
+    def search(
+        self, company_name: str, country: str
+    ) -> FoundWebsite | None: ...
