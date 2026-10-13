@@ -57,6 +57,13 @@ class Test抑制判定:
     def test_不命中(self):
         assert is_suppressed("ok@good.com", [{"email": "john@x.com"}]) is False
 
+    def test_相似后缀域名不误伤(self):
+        assert is_suppressed("a@notspam.com", [{"domain": "spam.com"}]) is False
+        assert is_suppressed("a@example.com", [{"domain": "ample.com"}]) is False
+
+    def test_域名大小写与前缀符号归一(self):
+        assert is_suppressed("a@Mail.SPAM.com", [{"domain": " @Spam.COM "}]) is True
+
     def test_空邮箱直接抑制(self):
         assert is_suppressed("", []) is True
 

@@ -56,7 +56,8 @@ def is_suppressed(email: str, suppressions: list[dict]) -> bool:
     for s in suppressions:
         if s.get("email") and s["email"].strip().lower() == email_lower:
             return True
-        if s.get("domain") and domain.endswith(s["domain"].strip().lower()):
+        blocked = (s.get("domain") or "").strip().lower().lstrip("@.")
+        if blocked and (domain == blocked or domain.endswith("." + blocked)):
             return True
     return False
 
