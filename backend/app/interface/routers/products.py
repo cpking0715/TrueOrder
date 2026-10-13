@@ -9,6 +9,7 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.domain.parse import build_quick_product
@@ -16,7 +17,7 @@ from app.infrastructure.importers import CsvImporter
 from app.infrastructure.queries import BuyerQueryFilters, SqlBuyerQueries
 from app.infrastructure.repositories import SqlProductRepository
 from app.interface.csv_safety import sanitize_csv_cell
-from app.interface.deps import get_buyer_queries, get_importer, get_product_repository
+from app.interface.deps import get_buyer_queries, get_importer, get_product_repository, get_session
 from app.interface.mapping import buyer_to_out, product_row_to_out
 from app.interface.schemas import (
     BuyerListOut,
@@ -225,3 +226,33 @@ async def import_products_csv(
     # 产品目录变化可能影响既有得分（关键词），导入后重打分
     rescores = importer.rescore(date.today())
     return ImportSummaryOut(**summary.__dict__, rescore=[r.__dict__ for r in rescores])
+
+
+@router.post("/{product_id}/discover-buyers", status_code=202)
+def discover_buyers(
+    product_id: int,
+    queries: SqlBuyerQueries = Depends(get_buyer_queries),
+    session: Session = Depends(get_session),
+):
+    """AI 买家发现：从品名/品类自动生成进口商名单 → 验证 → 补全联系方式。"""
+    from app.infrastructure.jobs import SqlJobQueue
+
+    product = queries.get_product_buyer_type(product_id)
+    if product is None:
+        raise HTTPException(status_code=404, detail=f"产品 {product_id} 不存在")
+    # 品类取产品名（AI 足够从品名推断行业）
+    from sqlalchemy import select as sel
+
+    from app.infrastructure.orm import ProductORM
+    name = session.scalar(
+        sel(ProductORM.name).where(ProductORM.id == product_id)
+    ) or ""
+    from app.infrastructure.orm import ProductHsCodeORM
+    hs = session.scalar(
+        sel(ProductHsCodeORM.hs_code).where(ProductHsCodeORM.product_id == product_id)
+    ) or ""
+    queue = SqlJobQueue(session)
+    job_id = queue.enqueue("discover_buyers", {
+        "product_id": product_id, "category": name, "hs_code": hs,
+    })
+    return {"job_id": job_id, "kind": "discover_buyers", "category": name}

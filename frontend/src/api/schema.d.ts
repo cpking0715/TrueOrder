@@ -133,6 +133,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/products/{product_id}/discover-buyers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Discover Buyers
+         * @description AI 买家发现：从品名/品类自动生成进口商名单 → 验证 → 补全联系方式。
+         */
+        post: operations["discover_buyers_api_products__product_id__discover_buyers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/bills/import": {
         parameters: {
             query?: never;
@@ -433,6 +453,26 @@ export interface paths {
         get: operations["suggest_hs_api_hs_suggest_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/hs/auto": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Auto Hs
+         * @description 品名 → AI 推断 HS 码 + 库内提单交叉验证（bill_count>0 则 confirmed）。
+         */
+        post: operations["auto_hs_api_hs_auto_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -820,6 +860,20 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** HsAutoIn */
+        HsAutoIn: {
+            /** Name */
+            name: string;
+        };
+        /** HsAutoOut */
+        HsAutoOut: {
+            /** Hs Code */
+            hs_code: string;
+            /** Source */
+            source: string;
+            /** Bill Count */
+            bill_count: number;
         };
         /** HsCodeOut */
         HsCodeOut: {
@@ -1299,6 +1353,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImportSummaryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    discover_buyers_api_products__product_id__discover_buyers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -1952,6 +2037,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HsSuggestOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    auto_hs_api_hs_auto_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HsAutoIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HsAutoOut"];
                 };
             };
             /** @description Validation Error */

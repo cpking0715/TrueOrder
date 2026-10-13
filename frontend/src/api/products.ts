@@ -85,3 +85,8 @@ export async function uploadProductsCsv(file: File): Promise<ImportSummary> {
 export async function uploadBillsCsv(file: File, asOf?: string): Promise<ImportSummary> {
   return uploadJson<ImportSummary>("/api/bills/import", file, asOf ? { as_of: asOf } : undefined);
 }
+
+// AI 买家发现：从品名自动生成进口商名单（不依赖提单数据）
+export async function discoverBuyers(productId: number): Promise<{ job_id: number; kind: string; category: string }> {
+  return requestJson(`/api/products/${productId}/discover-buyers`, { method: "POST" });
+}

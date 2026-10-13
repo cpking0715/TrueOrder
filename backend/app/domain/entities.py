@@ -163,3 +163,13 @@ class FoundWebsite:
     country: str  # 目录源声明的国家（ISO2，未知为空）
     source: str = "wikidata"
     email: str = ""  # 目录源偶得的公开联系邮箱（如 Wikidata P968），可为空
+
+
+@dataclass(frozen=True)
+class DiscoveredBuyer:
+    """AI 发现的潜在买家（训练数据中的真实公司，经 Wikidata/官网验证后入库）。"""
+
+    company_name: str
+    country: str = "US"
+    city: str = ""
+    note: str = ""  # AI 给的补充说明（如 "known apparel importer"）

@@ -331,8 +331,11 @@ def build_registry(
 
     directory 默认 None：测试（含冒烟）保持离线；生产由 worker 显式接线真实目录源。
     """
+    from app.infrastructure.discover import make_discover_buyers_handler
+
     return {
         "find_contacts": make_find_contacts_handler(finder, settings, directory),
         "crawl_website": make_crawl_website_handler(crawler, settings),
         "verify_email": make_verify_email_handler(finder, settings),
-    }  # AI 提取器由 crawl handler 按 settings/日上限自行装配
+        "discover_buyers": make_discover_buyers_handler(settings),
+    }

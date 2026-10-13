@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import { enrichBuyers, fetchEnrichUsage, type EnrichEstimate } from "@/api/contacts";
 import type { BuyerQuery } from "@/api/products";
+import DiscoverButton from "./DiscoverButton.vue";
 
 const props = defineProps<{ productId: number; query: BuyerQuery }>();
 
@@ -106,6 +107,8 @@ void loadUsageHint();
       >
         {{ busy ? "预估中…" : "预估额度" }}
       </button>
+      <DiscoverButton :product-id="productId" />
+
       <span
         v-if="executedCount > 0"
         class="small muted"
