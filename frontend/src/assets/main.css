@@ -339,8 +339,8 @@ tr.highlighted { background: var(--marine-soft); outline: 2px solid var(--marine
   gap: 10px;
   background: var(--marine-dark);
   color: #99f6e4;
-  border-radius: var(--radius) var(--radius) 0 0;
-  margin: -20px -20px 16px;
+  border-radius: var(--radius);
+  margin: 0 -20px 16px;
   padding: 10px 20px;
 }
 .strip .strip-code {
