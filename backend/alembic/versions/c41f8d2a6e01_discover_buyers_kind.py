@@ -5,12 +5,12 @@ Revises: fcaacfb8b462
 Create Date: 2026-10-13 10:00:00.000000
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 from alembic import op
 
 revision: str = 'c41f8d2a6e01'
-down_revision: Union[str, Sequence[str], None] = 'fcaacfb8b462'
+down_revision: str | Sequence[str] | None = 'fcaacfb8b462'
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

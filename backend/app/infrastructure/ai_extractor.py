@@ -32,6 +32,8 @@ class DeepSeekExtractor:
             "messages": build_extract_messages(page_text, url),
             "temperature": 0,
             "max_tokens": 2000,
+            # 推理模型思维链会吃光 max_tokens 致 content 为空，结构化提取无需推理
+            "thinking": {"type": "disabled"},
         }
         data = self._fetch(f"{self._base_url}/chat/completions", payload)
         self.calls += 1

@@ -502,3 +502,18 @@ class TestAI提取集成:
         handler = make_crawl_website_handler(CrawlerSpy(), cfg)
         Worker(queue, {"crawl_website": handler}).run_once(NOW)
         assert factory_called == []
+
+
+class TestDeepSeekExtractor:
+    def test_请求必须关闭推理模式(self):
+        """deepseek-flash 思维链会吃光 max_tokens 致 content 为空，提取必须关 thinking。"""
+        from app.infrastructure.ai_extractor import DeepSeekExtractor
+
+        captured: dict = {}
+
+        def fake_fetch(url, payload):
+            captured.update(payload)
+            return {"choices": [{"message": {"content": "[]"}}]}
+
+        DeepSeekExtractor(api_key="k", fetch=fake_fetch).extract("page", "https://x.com")
+        assert captured["thinking"] == {"type": "disabled"}

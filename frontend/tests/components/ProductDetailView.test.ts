@@ -227,6 +227,7 @@ describe("产品详情页（用户可见结果）", () => {
     const hint = await screen.findByTestId("no-bills-hint");
     expect(hint.textContent).toContain("库里还没有该税号的提单");
     expect(hint.textContent).toContain("导入提单");
+    expect(hint.textContent).toContain("AI 买家发现");
   });
 
   it("计数非 0 的产品不显示导入指引", async () => {

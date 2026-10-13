@@ -37,8 +37,11 @@ class HsAutoOut(BaseModel):
 
 
 _HS_AUTO_PROMPT = (
-    "根据产品名推断 6 位国际通用 HS 编码（前 6 位即可，不要 10 位国内码）。"
-    "只输出 6 位数字，不要任何解释。如果完全无法判断，输出 UNKNOWN。\n产品名：{name}"
+    "根据产品名推断 6 位国际通用 HS 编码（世界海关组织 HS 前 6 位，不是 10 位国内码）。\n"
+    "判定要点：先看品类；再看填充/材质；再看适用人群"
+    "（男装/男童服装通常 6201 开头，女装/女童通常 6202 开头，婴儿服装 6209 开头——"
+    "这些 4 位只是品类开头，最终答案必须补全到 6 位）。\n"
+    "只输出恰好 6 位数字，不要任何解释。如果完全无法判断，输出 UNKNOWN。\n产品名：{name}"
 )
 
 
@@ -90,24 +93,33 @@ def auto_hs(
     if not settings.ai_api_key:
         raise HTTPException(status_code=422, detail="未配置 AI Key，无法自动推荐")
 
-    response = httpx.post(
-        f"{settings.ai_base_url.rstrip('/')}/chat/completions",
-        json={
-            "model": settings.ai_model,
-            "messages": [
-                {"role": "user", "content": _HS_AUTO_PROMPT.format(name=name)},
-            ],
-            "temperature": 0,
-            "max_tokens": 2000,  # 推理模型思维链 ~350 tokens，答案需余量
-        },
-        headers={"Authorization": f"Bearer {settings.ai_api_key}"},
-        timeout=15,
-    )
-    response.raise_for_status()
-    content = (
-        response.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-    )
-    digits = "".join(c for c in content if c.isdigit())
+    # thinking 关闭后输出仍偶发漂移（不足 6 位 / UNKNOWN），最多试 3 次
+    content = ""
+    digits = ""
+    for _ in range(3):
+        response = httpx.post(
+            f"{settings.ai_base_url.rstrip('/')}/chat/completions",
+            json={
+                "model": settings.ai_model,
+                "messages": [
+                    {"role": "user", "content": _HS_AUTO_PROMPT.format(name=name)},
+                ],
+                "temperature": 0,
+                "max_tokens": 2000,
+                # deepseek-flash 是推理模型：思维链会随机膨胀吃光 max_tokens（content 为空）。
+                # 税号推断是简单分类任务，关闭 thinking；该参数对 deepseek-chat 无害。
+                "thinking": {"type": "disabled"},
+            },
+            headers={"Authorization": f"Bearer {settings.ai_api_key}"},
+            timeout=15,
+        )
+        response.raise_for_status()
+        content = (
+            response.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+        )
+        digits = "".join(c for c in content if c.isdigit())
+        if len(digits) >= 6 and digits != "UNKNOWN":
+            break
     if len(digits) < 6 or digits == "UNKNOWN":
         raise HTTPException(status_code=422, detail=f"AI 无法从「{name}」推断税号，请手动填写")
 

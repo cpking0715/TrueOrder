@@ -494,3 +494,67 @@ class Test税号自动推荐:
 
     def test_空品名422(self, client):
         assert client.post("/api/hs/auto", json={"name": ""}).status_code == 422
+
+    def test_必须关闭推理模式防思维链吃光预算(self, client, monkeypatch):
+        """deepseek-flash 思维链会随机膨胀吃光 max_tokens（content 空 → 422），
+        税号推断是简单分类任务，请求必须带 thinking disabled。"""
+        import app.interface.routers.hs as hs_mod
+
+        captured: dict = {}
+
+        class _Resp:
+            status_code = 200
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {"choices": [{"message": {"content": "620140"}}]}
+
+        def fake_post(url, json=None, headers=None, timeout=None):
+            captured.update(json or {})
+            return _Resp()
+
+        monkeypatch.setattr(hs_mod.httpx, "post", fake_post)
+        r = client.post("/api/hs/auto", json={"name": "儿童羽绒服"})
+        assert r.status_code == 200, r.text
+        assert captured["thinking"] == {"type": "disabled"}
+
+    def test_AI返回空内容时422(self, client, monkeypatch):
+        import app.interface.routers.hs as hs_mod
+
+        class _Resp:
+            status_code = 200
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {"choices": [{"message": {"content": ""}}]}  # 思维链吃光预算
+
+        monkeypatch.setattr(
+            hs_mod.httpx, "post", lambda *a, **k: _Resp()
+        )
+        r = client.post("/api/hs/auto", json={"name": "儿童羽绒服"})
+        assert r.status_code == 422
+        assert "无法" in r.json()["detail"]
+
+    def test_首次返回不合法时重试后成功(self, client, monkeypatch):
+        """DeepSeek 输出偶发漂移（不足 6 位/UNKNOWN），端点应重试而非直接 422。"""
+        import app.interface.routers.hs as hs_mod
+
+        contents = iter(["UNKNOWN", "6201", "620910"])
+
+        class _Resp:
+            status_code = 200
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {"choices": [{"message": {"content": next(contents)}}]}
+
+        monkeypatch.setattr(hs_mod.httpx, "post", lambda *a, **k: _Resp())
+        r = client.post("/api/hs/auto", json={"name": "儿童羽绒服"})
+        assert r.status_code == 200, r.text
+        assert r.json()["hs_code"] == "620910"
