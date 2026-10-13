@@ -229,8 +229,8 @@ def make_find_contacts_handler(
                 adopted_high = True
             session.flush()
 
-        if not (had_usable or adopted_high):
-            log.mark_ok(record_id)  # 已外呼（产出候选）：计入成功，防 30 天内重复查
+        # 有官网（无论来源：确认/Wikidata high/域名猜测）且 Hunter 找到联系人 → 入库
+        if not (had_usable or adopted_high or website_raw):
             return  # 中低置信候选：联系人不自动查，等用户确认官网
 
         repo = SqlContactRepository(session)
