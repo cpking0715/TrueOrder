@@ -24,7 +24,10 @@ def build_handlers() -> dict[str, Handler]:
     from app.infrastructure.enrichment import build_registry
     from app.infrastructure.website_directory import WikidataDirectory
 
-    return build_registry(directory=WikidataDirectory())
+    registry = build_registry(directory=WikidataDirectory())
+    from app.infrastructure.outreach import make_send_email_handler
+    registry["send_email"] = make_send_email_handler()
+    return registry
 
 
 def run_loop(

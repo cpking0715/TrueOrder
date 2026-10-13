@@ -367,4 +367,4 @@ def build_registry(
         "crawl_website": make_crawl_website_handler(crawler, settings),
         "verify_email": make_verify_email_handler(finder, settings),
         "discover_buyers": make_discover_buyers_handler(settings),
-    }
+    }  # send_email 由 outreach 模块单独注册

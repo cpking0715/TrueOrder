@@ -321,3 +321,71 @@ class ActivityORM(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     email_message_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class EmailTemplateORM(Base):
+    """开发信模板（WP5）。"""
+
+    __tablename__ = "email_templates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(64), unique=True)
+    subject: Mapped[str] = mapped_column(Text)
+    body: Mapped[str] = mapped_column(Text)
+    language: Mapped[str] = mapped_column(String(8), default="en")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class EmailMessageORM(Base):
+    """发送队列与日志（WP5）：status 流转 queued→sending→sent/failed/suppressed。"""
+
+    __tablename__ = "email_messages"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('queued','sending','sent','failed','bounced','suppressed')",
+            name="ck_email_messages_status",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    opportunity_id: Mapped[int] = mapped_column(
+        ForeignKey("opportunities.id", ondelete="CASCADE"), index=True
+    )
+    contact_id: Mapped[int] = mapped_column(
+        ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True
+    )
+    template_id: Mapped[int | None] = mapped_column(
+        ForeignKey("email_templates.id", ondelete="SET NULL"), nullable=True
+    )
+    subject: Mapped[str] = mapped_column(Text)
+    body: Mapped[str] = mapped_column(Text)  # 渲染后快照
+    status: Mapped[str] = mapped_column(String(16), default="queued")
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    scheduled_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    message_id_header: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class SuppressionORM(Base):
+    """抑制名单（WP5）：退订/退信/投诉/手动。"""
+
+    __tablename__ = "suppressions"
+    __table_args__ = (
+        CheckConstraint(
+            "reason IN ('unsubscribed','bounced','manual','complaint')",
+            name="ck_suppressions_reason",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    email: Mapped[str | None] = mapped_column(Text, nullable=True)
+    domain: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reason: Mapped[str] = mapped_column(String(16), default="manual")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

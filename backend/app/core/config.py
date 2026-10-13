@@ -24,6 +24,18 @@ class Settings(BaseSettings):
     ai_base_url: str = "https://api.deepseek.com"
     ai_model: str = "deepseek-flash"
     ai_daily_cap: int = 200  # AI 调用每日上限（同样仅用户触发，记审计）
+    # WP5 SMTP 发信（不配走 Fake 演示发送器）
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_security: str = "starttls"  # starttls | ssl | none
+    smtp_from_address: str = ""
+    smtp_from_name: str = ""
+    smtp_reply_to: str = ""
+    smtp_daily_cap: int = 30  # 每日发送上限（合规硬约束，不可界面关闭）
+    smtp_cooldown_days: int = 3  # 同一联系人两封间隔最小天数
+    company_address: str = ""  # 合规必填：公司物理地址（缺则拒绝发送）
     # 样本声明：界面必须展示「非全量库」
     sample_notice: str = (
         "当前库内为公开样本数据（非全量样本）：仅用于演示产品页、打分与导出，"
