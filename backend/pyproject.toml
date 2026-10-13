@@ -33,6 +33,8 @@ addopts = "-m 'not smoke'"
 [tool.ruff]
 line-length = 100
 target-version = "py313"
+# 已发布迁移不做格式化改写（改历史迁移会让既有库与代码失配）
+extend-exclude = ["alembic/versions"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
@@ -44,4 +46,3 @@ select = ["E", "F", "I", "UP", "B"]
 "tests/infra/test_importer.py" = ["E501"]
 "tests/infra/test_queries.py" = ["E501"]
 "tests/interface/test_api.py" = ["E501"]
-"alembic/versions/*" = ["E501"]
