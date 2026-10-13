@@ -77,8 +77,20 @@ def daily_remaining(sent_today: int, daily_cap: int = 30) -> int:
     return max(daily_cap - sent_today, 0)
 
 
+def missing_sender_config(company_address: str, reply_to: str) -> list[str]:
+    """合规必填的发件配置缺失项（CAN-SPAM 物理地址 + 可用的退订回复地址）。"""
+    missing = []
+    if not company_address.strip():
+        missing.append("TRUEORDER_COMPANY_ADDRESS（公司物理地址）")
+    if not reply_to.strip():
+        missing.append("TRUEORDER_SMTP_REPLY_TO（退订回复地址）")
+    return missing
+
+
 def check_send_guards(
     *,
+    company_address: str,
+    reply_to: str,
     email: str,
     do_not_contact: bool,
     verify_status: str,
@@ -88,7 +100,14 @@ def check_send_guards(
     daily_cap: int = 30,
     cooldown_days: int = 3,
 ) -> str | None:
-    """全量护栏检查；返回 None=可发，否则返回拒绝原因（状态码用）。"""
+    """全量护栏检查；返回 None=可发，否则返回拒绝原因（状态码用）。
+
+    发件配置（公司地址、退订回复地址）缺失时一律拒绝：DEV-SPEC 3.5 每封信必须带
+    物理地址与可用的退订途径，不允许用占位地址兜底。
+    """
+    missing = missing_sender_config(company_address, reply_to)
+    if missing:
+        return f"发件配置缺失，拒绝发送：{'、'.join(missing)}"
     if do_not_contact:
         return "联系人已标记不再联系"
     if verify_status in ("invalid", "bounced"):
@@ -102,6 +121,18 @@ def check_send_guards(
     return None
 
 
-def build_unsubscribe_header(reply_to: str = "") -> str:
-    """List-Unsubscribe 头（mailto 形式，本地部署无公网退订页）。"""
-    return f"<mailto:{reply_to or 'unsubscribe@localhost'}>"
+def build_unsubscribe_header(reply_to: str) -> str:
+    """List-Unsubscribe 头（mailto 形式，本地部署无公网退订页）。
+
+    reply_to 必填：不再用 unsubscribe@localhost 兜底（那是不可用的退订地址）。
+    """
+    if not reply_to.strip():
+        raise ValueError("缺少退订回复地址（TRUEORDER_SMTP_REPLY_TO）")
+    return f"<mailto:{reply_to.strip()}>"
+
+
+def compose_email_body(body: str, company_address: str) -> str:
+    """正文 + 页脚（退订语句 + 公司物理地址）。"""
+    if not company_address.strip():
+        raise ValueError("缺少公司物理地址（TRUEORDER_COMPANY_ADDRESS）")
+    return body + UNSUBSCRIBE_LINE + "\n" + company_address.strip()

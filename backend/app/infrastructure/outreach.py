@@ -9,9 +9,9 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.domain.outreach import (
-    UNSUBSCRIBE_LINE,
     build_unsubscribe_header,
     check_send_guards,
+    compose_email_body,
 )
 from app.infrastructure.mail import MailSender, make_mail_sender
 from app.infrastructure.orm import (
@@ -66,6 +66,8 @@ def make_send_email_handler(
         )
 
         rejection = check_send_guards(
+            company_address=cfg.company_address,
+            reply_to=cfg.smtp_reply_to,
             email=email,
             do_not_contact=bool(contact.do_not_contact) if contact else True,
             verify_status=contact.verify_status if contact else "unknown",
@@ -87,7 +89,7 @@ def make_send_email_handler(
             return
 
         # 发送
-        body_with_unsub = msg.body + UNSUBSCRIBE_LINE
+        body_with_unsub = compose_email_body(msg.body, cfg.company_address)
         try:
             message_header = active_sender.send(
                 to=email,
