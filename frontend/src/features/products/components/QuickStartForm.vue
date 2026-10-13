@@ -5,21 +5,19 @@ import AutoHsChip from "./AutoHsChip.vue";
 import HsSuggest from "./HsSuggest.vue";
 import { useAutoHs } from "../composables/useAutoHs";
 const emit = defineEmits<{ created: [product: Product] }>();
-
 const name = ref("");
 const hsCode = ref("");
 const buyerType = ref<"importer" | "factory" | "both">("importer");
 const buyerKeywords = ref("");
 const peerKeywords = ref("");
-const error = ref("");
-const submitting = ref(false);
+const error = ref(""); const submitting = ref(false);
 
 const { autoHs, busy: autoHsBusy, accept: acceptAutoHs } = useAutoHs(name, hsCode);
 
 const AUDIENCE_OPTIONS = [
-  { value: "importer", label: "海外进口商/批发商（卖成品的）" },
-  { value: "factory", label: "海外工厂（卖原料/设备的）" },
-  { value: "both", label: "两类客户都找" },
+  { value: "importer", label: "海外进口商/批发商" },
+  { value: "factory", label: "海外工厂" },
+  { value: "both", label: "两类都找" },
 ] as const;
 
 const DEFAULT_KEYWORDS: Record<string, string> = {
@@ -42,7 +40,6 @@ async function submit() {
     return;
   }
   const hs = hsCode.value.trim();
-  // 对齐后端 is_valid_hs
   if (!/^\d{6,10}$/.test(hs) || hs.slice(0, 6) === "000000") {
     error.value = "税号需为 6-10 位数字（不能全零），如 620462";
     return;
@@ -67,7 +64,11 @@ async function submit() {
 </script>
 
 <template>
-  <form class="quickstart" data-testid="quickstart-form" @submit.prevent="submit">
+  <form
+    class="quickstart"
+    data-testid="quickstart-form"
+    @submit.prevent="submit"
+  >
     <div class="strip">
       <span class="strip-code">Manifest Search</span>
       <span class="strip-title">授权提单库检索</span>

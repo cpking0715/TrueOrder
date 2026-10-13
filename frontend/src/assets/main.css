@@ -483,3 +483,5 @@ tr.highlighted { background: var(--marine-soft); outline: 2px solid var(--marine
     scroll-behavior: auto !important;
   }
 }
+.email-preview { margin: 8px 0; padding: 10px; }
+.email-body { white-space: pre-wrap; font-size: 12px; background: #f8f9fa; padding: 8px; border-radius: 4px; }

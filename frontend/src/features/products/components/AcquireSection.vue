@@ -1,12 +1,28 @@
 <script setup lang="ts">
+import { ref, watch } from "vue";
 import type { CompanyDetail } from "@/api/products";
 import type { Opportunity } from "@/api/opportunities";
+import type { Contact } from "@/api/contacts";
+import { fetchContacts } from "@/api/contacts";
 import FollowUpSection from "../../pipeline/components/FollowUpSection.vue";
+import SendEmailSection from "../../outreach/components/SendEmailSection.vue";
 import ContactsPanel from "./ContactsPanel.vue";
 import WebsiteField from "./WebsiteField.vue";
 
-defineProps<{ company: CompanyDetail["company"]; opportunity?: Opportunity | null }>();
+const props = defineProps<{ company: CompanyDetail["company"]; opportunity?: Opportunity | null }>();
 const emit = defineEmits<{ confirmed: []; changed: [] }>();
+
+const contacts = ref<Contact[]>([]);
+
+async function loadContacts() {
+  try {
+    contacts.value = await fetchContacts(props.company.company_id);
+  } catch {
+    contacts.value = [];
+  }
+}
+
+watch(() => props.company.company_id, () => void loadContacts(), { immediate: true });
 </script>
 
 <template>
@@ -26,5 +42,10 @@ const emit = defineEmits<{ confirmed: []; changed: [] }>();
     v-if="opportunity"
     :opportunity="opportunity"
     @changed="emit('changed')"
+  />
+  <SendEmailSection
+    v-if="opportunity"
+    :opportunity="opportunity"
+    :contacts="contacts"
   />
 </template>

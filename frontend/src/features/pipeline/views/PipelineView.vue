@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import OutreachPanel from "../../outreach/components/OutreachPanel.vue";
 import {
   STAGE_LABEL,
   fetchOpportunities,
@@ -247,6 +248,9 @@ onMounted(async () => {
         </button>
       </span>
     </div>
+
+    <!-- 功能区 5：邮件模板与发送日志 -->
+    <OutreachPanel />
   </div>
 </template>
 
