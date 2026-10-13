@@ -130,8 +130,12 @@ def make_find_contacts_handler(
     finder: ContactFinderProtocol | None = None,
     settings: Settings | None = None,
     directory: WebsiteDirectoryProtocol | None = None,
+    domain_guesser=None,
 ):
-    """补全联系人：免费目录源（官网发现）优先，计量 finder 兜底/查联系人。"""
+    """补全联系人：免费目录源（官网发现）优先，计量 finder 兜底/查联系人。
+
+    domain_guesser: 可选的域名猜测探测函数（生产由 worker 注入，测试跳过）。
+    """
 
     def handler(session: Session, payload: dict) -> None:
         company_id = int(payload["company_id"])
@@ -174,6 +178,21 @@ def make_find_contacts_handler(
                         company_id, name=None, title="", email=found.email,
                         phone=None, source=found.source, source_ref=f"{found.source}:P968",
                     )
+
+        # 域名猜测兜底：Wikidata 没找到时，从公司名猜常见域名（免费，不占额度）
+        if not had_usable and domain_guesser is not None:
+            from app.domain.guess_domain import guess_domains
+
+            for domain in guess_domains(_company_display_name(company)):
+                candidate = f"https://{domain}"
+                if domain_guesser(candidate):  # 返回 True = 域名可达
+                    company.website = candidate
+                    company.website_source = "guess"
+                    company.website_confidence = "medium"
+                    session.flush()
+                    log.record("guess", company_id, credits_used=0)
+                    session.commit()
+                    break
 
         # F3 额度原子预留：先记账（advisory lock）再外呼；额度是日滚动资源，
         # 用尽 → 延期到明日（F4），不是失败。
@@ -333,8 +352,18 @@ def build_registry(
     """
     from app.infrastructure.discover import make_discover_buyers_handler
 
+    def _probe_domain(url: str) -> bool:
+        import httpx
+        try:
+            r = httpx.head(url, timeout=5, follow_redirects=True)
+            return r.status_code < 400
+        except Exception:  # noqa: BLE001
+            return False
+
     return {
-        "find_contacts": make_find_contacts_handler(finder, settings, directory),
+        "find_contacts": make_find_contacts_handler(
+            finder, settings, directory, domain_guesser=_probe_domain,
+        ),
         "crawl_website": make_crawl_website_handler(crawler, settings),
         "verify_email": make_verify_email_handler(finder, settings),
         "discover_buyers": make_discover_buyers_handler(settings),
