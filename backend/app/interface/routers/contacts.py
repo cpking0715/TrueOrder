@@ -129,7 +129,7 @@ def patch_company(
 
 
 @router.post("/contacts/import", response_model=ContactsImportOut)
-async def import_contacts_csv(
+def import_contacts_csv(
     file: UploadFile,
     request: Request,
     repo: SqlContactRepository = Depends(get_contact_repository),
@@ -142,7 +142,7 @@ async def import_contacts_csv(
         raise HTTPException(
             status_code=413, detail=f"文件超过上传上限 {settings.max_upload_mb} MB"
         )
-    data = await file.read()
+    data = file.file.read()
     if len(data) > limit:
         raise HTTPException(
             status_code=413, detail=f"文件超过上传上限 {settings.max_upload_mb} MB"
