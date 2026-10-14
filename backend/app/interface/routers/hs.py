@@ -7,13 +7,13 @@
 
 from __future__ import annotations
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func, literal, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
+from app.infrastructure.llm_client import AiQuota, LlmClient, LlmError, LlmNotConfigured
 from app.infrastructure.orm import RawBillORM
 from app.interface.deps import get_session
 
@@ -90,37 +90,35 @@ def auto_hs(
     if not name:
         raise HTTPException(status_code=422, detail="产品名不能为空")
 
-    if not settings.ai_api_key:
-        raise HTTPException(status_code=422, detail="未配置 AI Key，无法自动推荐")
+    quota = AiQuota(session, settings.ai_daily_cap)
+    if quota.remaining() <= 0:
+        raise HTTPException(
+            status_code=429,
+            detail=f"今日 AI 调用已达上限（{settings.ai_daily_cap}），请明日再试或手动填写",
+        )
+    try:
+        client = LlmClient.from_settings(settings, timeout=15)
+    except LlmNotConfigured as exc:
+        raise HTTPException(status_code=422, detail="未配置 AI Key，无法自动推荐") from exc
 
-    # thinking 关闭后输出仍偶发漂移（不足 6 位 / UNKNOWN），最多试 3 次
-    content = ""
+    # thinking 关闭后输出仍偶发漂移（不足 6 位 / UNKNOWN），最多试 3 次；每次外呼计入 AI 日额度
     digits = ""
-    for _ in range(3):
-        response = httpx.post(
-            f"{settings.ai_base_url.rstrip('/')}/chat/completions",
-            json={
-                "model": settings.ai_model,
-                "messages": [
-                    {"role": "user", "content": _HS_AUTO_PROMPT.format(name=name)},
-                ],
-                "temperature": 0,
-                "max_tokens": 2000,
-                # deepseek-flash 是推理模型：思维链会随机膨胀吃光 max_tokens（content 为空）。
-                # 税号推断是简单分类任务，关闭 thinking；该参数对 deepseek-chat 无害。
-                "thinking": {"type": "disabled"},
-            },
-            headers={"Authorization": f"Bearer {settings.ai_api_key}"},
-            timeout=15,
-        )
-        response.raise_for_status()
-        content = (
-            response.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-        )
-        digits = "".join(c for c in content if c.isdigit())
-        if len(digits) >= 6 and digits != "UNKNOWN":
-            break
-    if len(digits) < 6 or digits == "UNKNOWN":
+    try:
+        for _ in range(min(3, quota.remaining())):
+            quota.record("ai-hs")
+            content = client.chat(
+                [{"role": "user", "content": _HS_AUTO_PROMPT.format(name=name)}],
+                temperature=0,
+                max_tokens=2000,
+            )
+            digits = "".join(c for c in content if c.isdigit())
+            if len(digits) >= 6:
+                break
+    except LlmError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    finally:
+        session.commit()  # 审计行无论成败都落库
+    if len(digits) < 6:
         raise HTTPException(status_code=422, detail=f"AI 无法从「{name}」推断税号，请手动填写")
 
     hs_code = digits[:6]

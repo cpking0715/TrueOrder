@@ -8,15 +8,19 @@ find_contacts / crawl_website / verify_email（verify 仅配置 Hunter Key 后�
 from __future__ import annotations
 
 import argparse
-import time
+import signal
+import threading
 from collections.abc import Callable
 from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
+from app.core.logging import configure_logging, get_logger
 from app.infrastructure.db import make_engine, make_session_factory
 from app.infrastructure.jobs import Handler, SqlJobQueue, Worker
+
+log = get_logger("app.worker")
 
 
 def build_handlers() -> dict[str, Handler]:
@@ -35,17 +39,31 @@ def run_loop(
     handlers: dict[str, Callable[[Session, dict], None]],
     interval: float = 2.0,
     once: bool = False,
+    stop: threading.Event | None = None,
 ) -> None:
-    while True:
+    """轮询循环；stop 被置位后在当前任务结束时退出（不打断执行中的任务）。"""
+    stop = stop or threading.Event()
+    while not stop.is_set():
         session = factory()
         try:
             worker = Worker(SqlJobQueue(session), handlers)
-            worker.run_once(datetime.now(UTC))
+            worker.run_once(datetime.now(UTC), should_stop=stop.is_set)
         finally:
             session.close()
         if once:
             return
-        time.sleep(interval)
+        stop.wait(interval)
+
+
+def install_signal_handlers(stop: threading.Event) -> None:
+    """SIGTERM / SIGINT → 置位 stop，跑完当前任务后退出（容器/进程托管优雅停止）。"""
+
+    def _handle(signum, _frame):
+        log.info("收到停止信号，当前任务完成后退出", extra={"signal": signal.Signals(signum).name})
+        stop.set()
+
+    signal.signal(signal.SIGTERM, _handle)
+    signal.signal(signal.SIGINT, _handle)
 
 
 def main() -> None:
@@ -54,15 +72,15 @@ def main() -> None:
     parser.add_argument("--interval", type=float, default=2.0, help="轮询间隔秒数")
     args = parser.parse_args()
 
+    configure_logging()
     engine = make_engine(get_settings().database_url)
     factory = make_session_factory(engine)
     handlers = build_handlers()
-    names = sorted(handlers) or "（无，WP4 接入）"
-    print(f"worker 启动：handlers={names}，interval={args.interval}s")
-    try:
-        run_loop(factory, handlers, interval=args.interval, once=args.once)
-    except KeyboardInterrupt:
-        print("worker 已停止")
+    stop = threading.Event()
+    install_signal_handlers(stop)
+    log.info("worker 启动", extra={"handlers": sorted(handlers), "interval": args.interval})
+    run_loop(factory, handlers, interval=args.interval, once=args.once, stop=stop)
+    log.info("worker 已停止")
 
 
 if __name__ == "__main__":

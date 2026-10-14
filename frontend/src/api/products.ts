@@ -1,6 +1,6 @@
 /** 产品域 API：类型来自后端 OpenAPI 生成（pnpm gen:api），不手写接口类型。 */
 
-import { requestJson, uploadJson } from "./client";
+import { requestJson, uploadJson, withApiToken } from "./client";
 import type { components } from "./schema";
 
 export type Meta = components["schemas"]["MetaOut"];
@@ -63,7 +63,7 @@ export const BUYERS_PAGE_LIMIT = 500;
 
 export function buyersExportUrl(productId: number, query: BuyerQuery): string {
   const search = new URLSearchParams(buildBuyersParams(query)).toString();
-  return `/api/products/${productId}/buyers/export.csv?${search}`;
+  return withApiToken(`/api/products/${productId}/buyers/export.csv?${search}`);
 }
 
 export async function fetchCompany(

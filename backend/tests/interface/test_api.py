@@ -489,7 +489,7 @@ class Test税号自动推荐:
 
     @pytest.fixture(autouse=True)
     def _fake_ai(self, client, monkeypatch):
-        import app.interface.routers.hs as hs_mod
+        import app.infrastructure.llm_client as hs_mod
         from app.core.config import Settings, get_settings
 
         client.app.dependency_overrides[get_settings] = lambda: Settings(
@@ -506,6 +506,36 @@ class Test税号自动推荐:
                 return {"choices": [{"message": {"content": "620462"}}]}
 
         monkeypatch.setattr(hs_mod.httpx, "post", lambda *a, **k: _Resp())
+
+    def test_AI服务HTTP错误返回502(self, client, monkeypatch):
+        import httpx
+
+        import app.infrastructure.llm_client as llm_mod
+
+        def boom(*a, **k):
+            raise httpx.ConnectTimeout("timeout")
+
+        monkeypatch.setattr(llm_mod.httpx, "post", boom)
+        r = client.post("/api/hs/auto", json={"name": "儿童羽绒服"})
+        assert r.status_code == 502
+        assert "AI 服务调用失败" in r.json()["detail"]
+
+    def test_每次外呼计入AI日额度_用尽返回429(self, client, engine):
+        from sqlalchemy import text as sql_text
+
+        from app.core.config import Settings, get_settings
+
+        client.app.dependency_overrides[get_settings] = lambda: Settings(
+            ai_api_key="test-key", ai_daily_cap=1, _env_file=None
+        )
+        assert client.post("/api/hs/auto", json={"name": "女士棉质长裤"}).status_code == 200
+        with engine.connect() as conn:
+            n = conn.execute(
+                sql_text("select count(*) from enrichment_calls where provider='ai-hs'")
+            ).scalar_one()
+        assert n == 1
+        r = client.post("/api/hs/auto", json={"name": "女士棉质长裤"})
+        assert r.status_code == 429
 
     def test_未配置AIKey时422(self, client):
         from app.core.config import Settings, get_settings
@@ -532,7 +562,7 @@ class Test税号自动推荐:
     def test_必须关闭推理模式防思维链吃光预算(self, client, monkeypatch):
         """deepseek-flash 思维链会随机膨胀吃光 max_tokens（content 空 → 422），
         税号推断是简单分类任务，请求必须带 thinking disabled。"""
-        import app.interface.routers.hs as hs_mod
+        import app.infrastructure.llm_client as hs_mod
 
         captured: dict = {}
 
@@ -555,7 +585,7 @@ class Test税号自动推荐:
         assert captured["thinking"] == {"type": "disabled"}
 
     def test_AI返回空内容时422(self, client, monkeypatch):
-        import app.interface.routers.hs as hs_mod
+        import app.infrastructure.llm_client as hs_mod
 
         class _Resp:
             status_code = 200
@@ -575,7 +605,7 @@ class Test税号自动推荐:
 
     def test_首次返回不合法时重试后成功(self, client, monkeypatch):
         """DeepSeek 输出偶发漂移（不足 6 位/UNKNOWN），端点应重试而非直接 422。"""
-        import app.interface.routers.hs as hs_mod
+        import app.infrastructure.llm_client as hs_mod
 
         contents = iter(["UNKNOWN", "6201", "620910"])
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { withApiToken } from "@/api/client";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import NoticeBanner from "@/components/NoticeBanner.vue";
@@ -38,7 +39,7 @@ const selectedCompanyId = ref<number | null>(null);
 const contactsExportUrl = computed(() => {
   const url = filters.exportUrl.value;
   const search = url.includes("?") ? url.slice(url.indexOf("?")) : "";
-  return `/api/products/${route.params.id}/contacts/export.csv${search}`;
+  return withApiToken(`/api/products/${route.params.id}/contacts/export.csv${search}`);
 });
 const error = ref("");
 const opportunities = ref<Opportunity[]>([]);

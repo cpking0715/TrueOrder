@@ -71,6 +71,24 @@ TRUEORDER_ENRICH_DAILY_CAP=20     # 按次补全每日上限（合规约束，�
 
 每次补全自动先走免费源，免费源没结果才消耗 Hunter 额度；全部调用（含 AI 提取）记入 `enrichment_calls` 可审计。
 
+### 2d. 访问令牌、发信合规与运维（Phase 1）
+
+```bash
+# backend/.env
+TRUEORDER_API_TOKEN=换成一串随机长字符串   # 设置后所有 /api 都要带令牌；留空 = 关闭鉴权（仅限本机）
+TRUEORDER_COMPANY_ADDRESS="公司物理地址"   # 发信必填：缺失则拒绝发送（CAN-SPAM）
+TRUEORDER_SMTP_REPLY_TO=reply@yourco.com   # 发信必填：退订回复地址（List-Unsubscribe）
+TRUEORDER_AI_DAILY_CAP=200                 # 全部 AI 调用（税号推荐/买家发现/联系人提取）合计每日上限
+TRUEORDER_LOG_LEVEL=INFO                   # 日志为单行 JSON（stderr），带 request_id / job_id
+```
+
+- **鉴权**：令牌可放 `Authorization: Bearer <token>`、`X-API-Token` 头，或（仅 CSV 下载链接）`?api_token=`。
+  前端开发时在 `frontend/.env.local` 写 `VITE_API_TOKEN=<同一令牌>`；用后端托管的构建产物时，
+  在浏览器控制台执行一次 `localStorage.setItem("trueorder_api_token", "<令牌>")`。
+- `uvicorn` 默认只监听 `127.0.0.1`；**不设令牌时不要加 `--host 0.0.0.0` 对外暴露**。
+- 探活：`GET /healthz`（不鉴权，检查数据库连通，失败返回 503）。
+- worker 收到 SIGTERM/SIGINT 后跑完当前任务再退出；任务逐个认领。
+
 ### 3. 前端（开发模式）
 
 ```bash

@@ -1,12 +1,9 @@
 /** 税号自动推荐：品名变化 → debounce → AI 推荐 → chip 展示 → 点击回填。 */
 
 import { ref, watch, type Ref } from "vue";
+import { autoHs as requestAutoHs, type AutoHsResult } from "@/api/hs";
 
-export interface AutoHsResult {
-  hs_code: string;
-  source: string;
-  bill_count: number;
-}
+export type { AutoHsResult };
 
 export function useAutoHs(name: Ref<string>, hsCode: Ref<string>) {
   const autoHs = ref<AutoHsResult | null>(null);
@@ -20,12 +17,7 @@ export function useAutoHs(name: Ref<string>, hsCode: Ref<string>) {
     }
     busy.value = true;
     try {
-      const response = await fetch("/api/hs/auto", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.value.trim() }),
-      });
-      autoHs.value = response.ok ? await response.json() : null;
+      autoHs.value = await requestAutoHs(name.value.trim());
     } catch {
       autoHs.value = null;
     } finally {

@@ -176,6 +176,8 @@ def preview(
         email=contact.email or "",
         do_not_contact=bool(contact.do_not_contact),
         verify_status=contact.verify_status,
+        source=contact.source,
+        source_ref=contact.source_ref,
         suppressions=suppressions,
         recent_sends=[],
         sent_today=0,
@@ -187,7 +189,8 @@ def preview(
             if settings.company_address.strip()
             else body + UNSUBSCRIBE_LINE
         ),
-        guards_ok=guards_error is None, guards_error=guards_error,
+        guards_ok=guards_error is None,
+        guards_error=guards_error.message if guards_error else None,
     )
 
 

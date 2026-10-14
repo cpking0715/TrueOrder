@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     database_url: str = (
         "postgresql+psycopg://trueorder:trueorder@localhost:5433/trueorder"
     )
+    # API 访问令牌：设置后所有 /api 路由必须带令牌；空 = 关闭鉴权（仅限本机开发/演示）
+    api_token: str = ""
     # CSV 上传上限（MB）：产品与提单导入端点共用，超出返回 413
     max_upload_mb: int = 20
     # WP4 补全：Hunter API Key（空 = 走 fake 演示数据并在界面提示）

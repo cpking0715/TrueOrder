@@ -1,6 +1,7 @@
 /** 买家筛选：纯函数构造查询参数与导出地址，便于直测。 */
 
 import { computed, ref } from "vue";
+import { withApiToken } from "@/api/client";
 import { buildBuyersParams, type Tier, type Order } from "@/api/products";
 
 export interface FilterState {
@@ -28,7 +29,7 @@ export function filterQueryParams(state: FilterState, audience: string): Record<
 
 export function filterExportUrl(productId: number, state: FilterState, audience: string): string {
   const search = new URLSearchParams(filterQueryParams(state, audience)).toString();
-  return `/api/products/${productId}/buyers/export.csv?${search}`;
+  return withApiToken(`/api/products/${productId}/buyers/export.csv?${search}`);
 }
 
 export function useBuyerFilters(
