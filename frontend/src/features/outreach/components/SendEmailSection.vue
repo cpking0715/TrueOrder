@@ -2,13 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import type { Opportunity } from "@/api/opportunities";
 import type { Contact } from "@/api/contacts";
-import {
-  fetchTemplates,
-  previewEmail,
-  queueSend,
-  type Template,
-  type PreviewResult,
-} from "@/api/outreach";
+import { fetchTemplates, previewEmail, queueSend, type Template, type PreviewResult } from "@/api/outreach";
 
 const props = defineProps<{ opportunity: Opportunity; contacts: Contact[] }>();
 const emit = defineEmits<{ sent: [] }>();
@@ -128,12 +122,29 @@ onMounted(load);
       >
         <p><strong>主题：</strong>{{ preview.subject }}</p>
         <pre class="email-body">{{ preview.body }}</pre>
-        <p v-if="!preview.guards_ok" class="badge excluded">{{ preview.guards_error }}</p>
-        <button v-else class="small primary" :disabled="busy" data-testid="send-email" @click="send">
+        <p
+          v-if="!preview.guards_ok"
+          class="badge excluded"
+        >
+          {{ preview.guards_error }}
+        </p>
+        <button
+          v-else
+          class="small primary"
+          :disabled="busy"
+          data-testid="send-email"
+          @click="send"
+        >
           {{ busy ? "发送中…" : "确认发送" }}
         </button>
       </div>
-      <p v-if="sent" class="small muted" data-testid="sent-hint">已入队发送——worker 执行后可在消息日志查看状态</p>
+      <p
+        v-if="sent"
+        class="small muted"
+        data-testid="sent-hint"
+      >
+        已入队发送——worker 执行后可在消息日志查看状态
+      </p>
       <p
         v-if="error"
         class="error small"

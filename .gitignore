@@ -35,3 +35,7 @@ backend/tests/perf/bills_*.csv
 
 # ZCode 工作区索引配置（本地环境产物）
 .zcodeignore
+
+# 本地审阅临时产物（脚本/截图/日志），不入库
+.review/
+*.err

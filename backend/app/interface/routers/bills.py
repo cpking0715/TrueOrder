@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api", tags=["bills", "companies"])
 
 
 @router.post("/bills/import", response_model=ImportSummaryOut)
-async def import_bills_csv(
+def import_bills_csv(
     file: UploadFile,
     request: Request,
     as_of: date | None = Form(default=None),
@@ -31,7 +31,7 @@ async def import_bills_csv(
         raise HTTPException(
             status_code=413, detail=f"文件超过上传上限 {settings.max_upload_mb} MB"
         )
-    data = await file.read()
+    data = file.file.read()
     if len(data) > limit:
         raise HTTPException(
             status_code=413, detail=f"文件超过上传上限 {settings.max_upload_mb} MB"

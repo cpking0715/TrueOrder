@@ -200,7 +200,7 @@ def export_buyers(
 
 
 @router.post("/import", response_model=ImportSummaryOut)
-async def import_products_csv(
+def import_products_csv(
     file: UploadFile,
     request: Request,
     importer: CsvImporter = Depends(get_importer),
@@ -213,7 +213,7 @@ async def import_products_csv(
         raise HTTPException(
             status_code=413, detail=f"文件超过上传上限 {settings.max_upload_mb} MB"
         )
-    data = await file.read()
+    data = file.file.read()
     if len(data) > limit:
         raise HTTPException(
             status_code=413, detail=f"文件超过上传上限 {settings.max_upload_mb} MB"

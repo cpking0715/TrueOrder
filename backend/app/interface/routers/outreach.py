@@ -9,9 +9,11 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import Settings, get_settings
 from app.domain.outreach import (
     UNSUBSCRIBE_LINE,
     check_send_guards,
+    compose_email_body,
     render_template,
     validate_template,
 )
@@ -129,7 +131,11 @@ def delete_template(template_id: int, session: Session = Depends(_session_dep)):
 # ---------- 预览与入队 ----------
 
 @router.post("/preview", response_model=PreviewOut)
-def preview(payload: PreviewIn, session: Session = Depends(_session_dep)):
+def preview(
+    payload: PreviewIn,
+    session: Session = Depends(_session_dep),
+    settings: Settings = Depends(get_settings),
+):
     """渲染模板 + 护栏检查；返回预览结果（不发送）。"""
     template = session.get(EmailTemplateORM, payload.template_id)
     if template is None:
@@ -165,6 +171,8 @@ def preview(payload: PreviewIn, session: Session = Depends(_session_dep)):
         for s in session.scalars(select(SuppressionORM))
     ]
     guards_error = check_send_guards(
+        company_address=settings.company_address,
+        reply_to=settings.smtp_reply_to,
         email=contact.email or "",
         do_not_contact=bool(contact.do_not_contact),
         verify_status=contact.verify_status,
@@ -173,7 +181,12 @@ def preview(payload: PreviewIn, session: Session = Depends(_session_dep)):
         sent_today=0,
     )
     return PreviewOut(
-        subject=subject, body=body + UNSUBSCRIBE_LINE,
+        subject=subject,
+        body=(
+            compose_email_body(body, settings.company_address)
+            if settings.company_address.strip()
+            else body + UNSUBSCRIBE_LINE
+        ),
         guards_ok=guards_error is None, guards_error=guards_error,
     )
 

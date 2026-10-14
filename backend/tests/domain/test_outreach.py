@@ -11,6 +11,7 @@ from app.domain.outreach import (
     UNSUBSCRIBE_LINE,
     build_unsubscribe_header,
     check_send_guards,
+    compose_email_body,
     daily_remaining,
     is_in_cooldown,
     is_suppressed,
@@ -56,6 +57,13 @@ class Test抑制判定:
     def test_不命中(self):
         assert is_suppressed("ok@good.com", [{"email": "john@x.com"}]) is False
 
+    def test_相似后缀域名不误伤(self):
+        assert is_suppressed("a@notspam.com", [{"domain": "spam.com"}]) is False
+        assert is_suppressed("a@example.com", [{"domain": "ample.com"}]) is False
+
+    def test_域名大小写与前缀符号归一(self):
+        assert is_suppressed("a@Mail.SPAM.com", [{"domain": " @Spam.COM "}]) is True
+
     def test_空邮箱直接抑制(self):
         assert is_suppressed("", []) is True
 
@@ -80,6 +88,7 @@ class Test冷却与额度:
 class Test护栏:
     def _base(self, **over):
         params = dict(
+            company_address="1 Main St, Springfield, US", reply_to="reply@myco.com",
             email="ok@x.com", do_not_contact=False, verify_status="unknown",
             suppressions=[], recent_sends=[], sent_today=0,
         )
@@ -108,6 +117,17 @@ class Test护栏:
             **self._base(recent_sends=[now - timedelta(hours=12)]))
 
 
+    def test_缺公司地址拒绝(self):
+        assert "COMPANY_ADDRESS" in check_send_guards(**self._base(company_address=""))
+
+    def test_缺退订回复地址拒绝(self):
+        assert "SMTP_REPLY_TO" in check_send_guards(**self._base(reply_to="  "))
+
+    def test_配置缺失原因不被误判为抑制或额度(self):
+        reason = check_send_guards(**self._base(company_address="", reply_to=""))
+        assert "抑制" not in reason and "额度" not in reason
+
+
 class Test退订:
     def test_Header格式(self):
         h = build_unsubscribe_header("reply@myco.com")
@@ -115,3 +135,19 @@ class Test退订:
 
     def test_正文退订语句存在(self):
         assert "STOP" in UNSUBSCRIBE_LINE
+
+    def test_无退订地址不再兜底localhost(self):
+        with pytest.raises(ValueError):
+            build_unsubscribe_header("")
+
+
+class Test页脚:
+    def test_正文附退订语句与公司地址(self):
+        out = compose_email_body("Hello", "1 Main St, Springfield, US")
+        assert out.startswith("Hello")
+        assert "STOP" in out
+        assert out.rstrip().endswith("1 Main St, Springfield, US")
+
+    def test_缺公司地址报错(self):
+        with pytest.raises(ValueError):
+            compose_email_body("Hello", " ")
