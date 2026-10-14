@@ -99,6 +99,8 @@ class SqlBuyerQueries:
             stmt = stmt.order_by(
                 CompanyScoreORM.shipments.desc(), CompanyORM.normalized_name.asc()
             )
+        # 唯一兜底排序：分页/分批导出时顺序确定，不重不漏
+        stmt = stmt.order_by(CompanyORM.id.asc())
 
         rows = self._session.execute(stmt.limit(f.limit).offset(f.offset)).all()
         items = [
@@ -285,3 +287,65 @@ class SqlBuyerQueries:
                 }
             )
         return detail
+
+    def product_name_and_primary_hs(self, product_id: int) -> tuple[str, str]:
+        """发现买家任务用：产品名 + 第一个税号（可能都为空串）。"""
+        from app.infrastructure.orm import ProductHsCodeORM, ProductORM
+
+        name = (
+            self._session.scalar(select(ProductORM.name).where(ProductORM.id == product_id)) or ""
+        )
+        hs = self._session.scalar(
+            select(ProductHsCodeORM.hs_code)
+            .where(ProductHsCodeORM.product_id == product_id)
+            .order_by(ProductHsCodeORM.id)
+            .limit(1)
+        ) or ""
+        return name, hs
+
+    def suggest_hs_codes(self, keyword: str, limit: int = 8) -> list[tuple[str, int, str]]:
+        """品名关键词 → (hs_code, shipments, sample_description)。"""
+        from sqlalchemy import literal
+
+        from app.infrastructure.orm import RawBillORM
+
+        rows = self._session.execute(
+            select(
+                RawBillORM.hs_code,
+                func.count().label("shipments"),
+                func.max(RawBillORM.product_description).label("sample"),
+            )
+            .where(
+                RawBillORM.product_description.ilike(f"%{keyword}%"),
+                RawBillORM.hs_code.isnot(None),
+                RawBillORM.hs_code != "",
+            )
+            .group_by(RawBillORM.hs_code)
+            .order_by(literal("shipments").desc())
+            .limit(limit)
+        ).all()
+        return [(hs, int(n), (sample or "")[:120]) for hs, n, sample in rows]
+
+    def bill_count_for_hs(self, hs_code: str) -> int:
+        from app.infrastructure.orm import RawBillORM
+
+        return int(
+            self._session.scalar(
+                select(func.count()).select_from(RawBillORM).where(RawBillORM.hs_code == hs_code)
+            )
+            or 0
+        )
+
+    def iter_buyers(self, f: BuyerQueryFilters, batch_size: int = 500):
+        """导出用：按批 yield BuyerRow，避免一次加载 10 万行。"""
+        offset = 0
+        while True:
+            batch = BuyerQueryFilters(**{**f.__dict__, "limit": batch_size, "offset": offset})
+            items, total = self.query_buyers(batch)
+            if not items:
+                return
+            yield from items
+            offset += len(items)
+            if offset >= total or len(items) < batch_size:
+                return
+

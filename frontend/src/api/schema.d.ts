@@ -265,7 +265,7 @@ export interface paths {
          * @description 按买家列表同一组筛选导出联系人（每联系人一行）。
          *
          *     默认排除 do_not_contact 与 verify_status in (invalid, bounced)；
-         *     include_invalid=true 放开。官网置信度列待 WP4 补全功能落地后填值。
+         *     include_invalid=true 放开。按批拉买家，避免一次驻留 10 万行。
          */
         get: operations["export_contacts_api_products__product_id__contacts_export_csv_get"];
         put?: never;

@@ -9,13 +9,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import func, literal, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.infrastructure.llm_client import AiQuota, LlmClient, LlmError, LlmNotConfigured
-from app.infrastructure.orm import RawBillORM
-from app.interface.deps import get_session
+from app.infrastructure.queries import SqlBuyerQueries
+from app.interface.deps import get_buyer_queries, get_session
 
 router = APIRouter(prefix="/api/hs", tags=["hs"])
 
@@ -49,40 +48,23 @@ _HS_AUTO_PROMPT = (
 def suggest_hs(
     q: str = Query(min_length=2),
     limit: int = Query(default=8, ge=1, le=20),
-    session: Session = Depends(get_session),
+    queries: SqlBuyerQueries = Depends(get_buyer_queries),
 ):
     keyword = q.strip()
     if len(keyword) < 2:
         raise HTTPException(status_code=422, detail="关键词至少 2 个字符")
-    rows = session.execute(
-        select(
-            RawBillORM.hs_code,
-            func.count().label("shipments"),
-            func.max(RawBillORM.product_description).label("sample"),
-        )
-        .where(
-            RawBillORM.product_description.ilike(f"%{keyword}%"),
-            RawBillORM.hs_code.isnot(None),
-            RawBillORM.hs_code != "",
-        )
-        .group_by(RawBillORM.hs_code)
-        .order_by(literal("shipments").desc())
-        .limit(limit)
-    ).all()
     return [
-        HsSuggestOut(
-            hs_code=hs,
-            shipments=int(n),
-            sample_description=(sample or "")[:120],
-        )
-        for hs, n, sample in rows
+        HsSuggestOut(hs_code=hs, shipments=n, sample_description=sample)
+        for hs, n, sample in queries.suggest_hs_codes(keyword, limit)
     ]
+
 
 
 @router.post("/auto", response_model=HsAutoOut)
 def auto_hs(
     payload: HsAutoIn,
     session: Session = Depends(get_session),
+    queries: SqlBuyerQueries = Depends(get_buyer_queries),
     settings: Settings = Depends(get_settings),
 ):
     """品名 → AI 推断 HS 码 + 库内提单交叉验证（bill_count>0 则 confirmed）。"""
@@ -124,13 +106,7 @@ def auto_hs(
     hs_code = digits[:6]
 
     # 交叉验证：库内有没有这个码的提单
-    bill_count = int(
-        session.scalar(
-            select(func.count()).select_from(RawBillORM).where(
-                RawBillORM.hs_code == hs_code
-            )
-        ) or 0
-    )
+    bill_count = queries.bill_count_for_hs(hs_code)
     return HsAutoOut(
         hs_code=hs_code,
         source="ai+confirmed" if bill_count > 0 else "ai",

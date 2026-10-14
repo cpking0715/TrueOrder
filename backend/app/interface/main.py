@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
+from app.core.config import get_settings, require_configured_database
 from app.core.logging import configure_logging, get_logger, request_id_var
 from app.interface.auth import require_api_token
 from app.interface.deps import get_session
@@ -34,6 +34,7 @@ log = get_logger("app.api")
 
 def create_app() -> FastAPI:
     configure_logging()
+    require_configured_database()
     app = FastAPI(
         title="TrueOrder 自家产品海外买家库",
         version="0.1.0",

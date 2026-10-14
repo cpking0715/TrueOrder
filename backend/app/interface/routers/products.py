@@ -18,6 +18,7 @@ from app.infrastructure.repositories import SqlProductRepository
 from app.interface.csv_safety import sanitize_csv_cell
 from app.interface.deps import (
     CsvUpload,
+    default_audience,
     get_buyer_queries,
     get_importer,
     get_product_repository,
@@ -33,15 +34,6 @@ from app.interface.schemas import (
 )
 
 router = APIRouter(prefix="/api/products", tags=["products"])
-
-
-def _default_audience(queries: SqlBuyerQueries, product_id: int) -> str:
-    buyer_type = queries.get_product_buyer_type(product_id)
-    if buyer_type is None:
-        raise HTTPException(status_code=404, detail=f"产品 {product_id} 不存在")
-    if buyer_type in ("importer", "factory"):
-        return buyer_type
-    return "importer"  # both 产品由前端显式切换受众
 
 
 @router.get("", response_model=list[ProductOut])
@@ -112,7 +104,7 @@ def list_buyers(
     queries: SqlBuyerQueries = Depends(get_buyer_queries),
 ):
     if audience is None:
-        audience = _default_audience(queries, product_id)
+        audience = default_audience(queries, product_id)
     if audience not in ("importer", "factory"):
         raise HTTPException(status_code=422, detail="audience 必须是 importer 或 factory")
     filters = BuyerQueryFilters(
@@ -149,7 +141,7 @@ def export_buyers(
 ):
     """当前筛选导出 CSV（与列表同一查询，不分页）。"""
     if audience is None:
-        audience = _default_audience(queries, product_id)
+        audience = default_audience(queries, product_id)
     if audience not in ("importer", "factory"):
         raise HTTPException(status_code=422, detail="audience 必须是 importer 或 factory")
     filters = BuyerQueryFilters(
@@ -163,8 +155,6 @@ def export_buyers(
         limit=100000,
         offset=0,
     )
-    items, _ = queries.query_buyers(filters)
-
     def reason_text(buyer) -> str:
         return "；".join(
             f"{r['text']}（提单 {'/'.join(str(i) for i in r.get('bill_ids', []))}）"
@@ -181,7 +171,7 @@ def export_buyers(
         yield _row(
             ["公司名", "国家", "城市", "等级", "票数", "最近到港", "供货方", "同名冲突", "排除原因", "得分理由"]  # noqa: E501
         )
-        for buyer in items:
+        for buyer in queries.iter_buyers(filters):
             yield _row(
                 [
                     sanitize_csv_cell(buyer.name),
@@ -229,17 +219,7 @@ def discover_buyers(
     product = queries.get_product_buyer_type(product_id)
     if product is None:
         raise HTTPException(status_code=404, detail=f"产品 {product_id} 不存在")
-    # 品类取产品名（AI 足够从品名推断行业）
-    from sqlalchemy import select as sel
-
-    from app.infrastructure.orm import ProductORM
-    name = session.scalar(
-        sel(ProductORM.name).where(ProductORM.id == product_id)
-    ) or ""
-    from app.infrastructure.orm import ProductHsCodeORM
-    hs = session.scalar(
-        sel(ProductHsCodeORM.hs_code).where(ProductHsCodeORM.product_id == product_id)
-    ) or ""
+    name, hs = queries.product_name_and_primary_hs(product_id)
     queue = SqlJobQueue(session)
     job_id = queue.enqueue("discover_buyers", {
         "product_id": product_id, "category": name, "hs_code": hs,

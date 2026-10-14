@@ -42,13 +42,26 @@
 | 域名发现（无官网按公司名查） | DEV-SPEC 3.6 与 1.4.1 的矛盾取舍：按 1.4.1 实现，同样受额度与审计约束 | 记录于 HANDOFF |
 | AI 增强提取（DeepSeek） | 仅官网联系页、每次抓取 ≤2 次、每日上限、provider=ai-extract 审计；提示词强制「原文出现、不推断」防幻觉；失败兜底正则结果 | ✔（2026-10-12 增补） |
 
-## 第二期：发信相关（随发信功能一起落地）
+## 第二期：发信相关 — 实现现状核对（WP5 / Phase 0–1，2026-10-14）
 
-以下内容在第二期实现时补齐，此处仅占位：
+> 下列护栏已落地；正式群发前仍须自行核实适用法域要求（本文非法律意见）。
 
-- 发件域名 DNS 要求：SPF / DKIM / DMARC 配置说明与预热建议。
-- 退订处理：`List-Unsubscribe: <mailto:...>` 头 + 正文「回复 STOP」；IMAP 轮询识别。
-- 抑制名单：退订、退信、投诉、手动四种来源，发送前强制检查。
-- 各地区要求：欧盟/英国（GDPR 合法利益、可退订、来源说明）与美国（CAN-SPAM：真实
-  发件人、物理地址、可退订）的差异提示文案。
-- 每日上限与发送间隔的运营预期（新域名冷启动送达率）。
+| 承诺 | 实现位置 | 核对 |
+| --- | --- | --- |
+| 公司物理地址必填，缺则拒发 | `TRUEORDER_COMPANY_ADDRESS`；`check_send_guards` → `SENDER_CONFIG_MISSING`；正文页脚 `compose_email_body` | ✔ |
+| 退订语句 + `List-Unsubscribe: mailto:` | `UNSUBSCRIBE_LINE`；`build_unsubscribe_header`（无 reply_to 不再兜底 localhost） | ✔ |
+| 抑制名单（邮箱/域名）发送前强制检查 | `suppressions` 表 + `is_suppressed`（域名精确匹配或子域） | ✔ |
+| `do_not_contact` / invalid|bounced 不发 | `SendRejection.DO_NOT_CONTACT` / `INVALID_EMAIL` | ✔ |
+| 有来源记录才发 | `has_source_record`（`source` 必填；非 manual 须 `source_ref`） | ✔ |
+| 每日上限不可界面关闭 | `TRUEORDER_SMTP_DAILY_CAP`；`QUOTA` → 延期到次日 UTC，邮件保持 queued | ✔ |
+| 冷却间隔 | `TRUEORDER_SMTP_COOLDOWN_DAYS`（默认 3） | ✔ |
+| 预览后确认才入队 | `/api/outreach/preview` → `/queue` | ✔ |
+| 发送幂等 | `queued → sending → sent`；SMTP 失败 raise 重试；`sending` 重入不重发 | ✔ |
+| 结构化拒发原因 | `SendRejection` 枚举，worker 不匹配中文文案 | ✔ |
+
+### 运营侧仍须自行完成（系统外）
+
+- 发件域名 SPF / DKIM / DMARC 与新域名预热
+- IMAP 轮询识别「回复 STOP」写入抑制名单（代码已有 `imap_watcher`，部署时需配置）
+- 各地区文案差异（GDPR 合法利益说明等）按名单国家在模板中落实
+

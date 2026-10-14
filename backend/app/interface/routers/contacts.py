@@ -12,7 +12,13 @@ from fastapi.responses import StreamingResponse
 from app.infrastructure.contact_repository import SqlContactRepository
 from app.infrastructure.queries import BuyerQueryFilters, SqlBuyerQueries
 from app.interface.csv_safety import sanitize_csv_cell
-from app.interface.deps import CsvUpload, get_buyer_queries, get_contact_repository, read_csv_upload
+from app.interface.deps import (
+    CsvUpload,
+    default_audience,
+    get_buyer_queries,
+    get_contact_repository,
+    read_csv_upload,
+)
 from app.interface.schemas import (
     CompanyPatchIn,
     CompanyWebsiteOut,
@@ -121,7 +127,7 @@ def patch_company(
     result = repo.update_website(company_id, payload.website, payload.website_confirmed)
     if result is None:
         raise HTTPException(status_code=404, detail=f"公司 {company_id} 不存在")
-    website, confirmed = result
+    website, confirmed, source, confidence = result
     return CompanyWebsiteOut(
         company_id=company_id, website=website, website_confirmed=confirmed
     )
@@ -157,12 +163,10 @@ def export_contacts(
     """按买家列表同一组筛选导出联系人（每联系人一行）。
 
     默认排除 do_not_contact 与 verify_status in (invalid, bounced)；
-    include_invalid=true 放开。官网置信度列待 WP4 补全功能落地后填值。
+    include_invalid=true 放开。按批拉买家，避免一次驻留 10 万行。
     """
-    from app.interface.routers.products import _default_audience
-
     if audience is None:
-        audience = _default_audience(queries, product_id)
+        audience = default_audience(queries, product_id)
     if audience not in ("importer", "factory"):
         raise HTTPException(status_code=422, detail="audience 必须是 importer 或 factory")
     filters = BuyerQueryFilters(
@@ -175,9 +179,6 @@ def export_contacts(
         limit=100000,
         offset=0,
     )
-    buyers, _ = queries.query_buyers(filters)
-    rows = repo.export_rows([b.company_id for b in buyers], include_invalid=include_invalid)
-    buyers_by_company = {b.company_id: b for b in buyers}
 
     def _row_line(values: list) -> str:
         buf = io.StringIO()
@@ -185,14 +186,26 @@ def export_contacts(
         return buf.getvalue()
 
     def stream() -> Iterator[str]:
-        yield "\ufeff"
+        yield "﻿"
         yield _row_line(
             ["公司名", "国家", "城市", "等级", "票数", "最近到港", "联系人姓名", "职位",
              "邮箱", "电话", "是否通用邮箱", "验证状态", "来源", "来源链接", "获取时间",
              "官网", "官网置信度"]
         )
-        for company_id, contact in rows:
-            buyer = buyers_by_company.get(company_id)
+        batch: list = []
+        for buyer in queries.iter_buyers(filters):
+            batch.append(buyer)
+            if len(batch) < 500:
+                continue
+            yield from _contact_rows(batch)
+            batch = []
+        if batch:
+            yield from _contact_rows(batch)
+
+    def _contact_rows(buyers: list) -> Iterator[str]:
+        by_id = {b.company_id: b for b in buyers}
+        for company_id, contact in repo.export_rows(list(by_id), include_invalid=include_invalid):
+            buyer = by_id.get(company_id)
             if buyer is None:
                 continue
             yield _row_line(
@@ -223,3 +236,5 @@ def export_contacts(
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+

@@ -181,7 +181,7 @@ class WebsiteCrawler:
         """带 SSRF 复检的重定向跟随（最多 3 跳）+ DNS 钉扎 + 限速 + 1MB 上限；失败返回 None。"""
         current = url
         transport = httpx.HTTPTransport()
-        # 钉扎后端挂进连接池（httpx 未公开注入点，锁 uv.lock 的 httpcore 版本）
+        # 钉扎后端挂进连接池（httpx 未公开注入点；httpx/httpcore 版本见 pyproject 约束）
         transport._pool._network_backend = _PinnedBackend(self._pinned)  # noqa: SLF001
         with httpx.Client(
             timeout=REQUEST_TIMEOUT, follow_redirects=False, transport=transport
@@ -198,17 +198,32 @@ class WebsiteCrawler:
                 self._pinned.setdefault(host, ips[0])
                 self._throttle(host)
                 try:
-                    response = client.get(current)
+                    with client.stream("GET", current) as response:
+                        if response.is_redirect:
+                            current = urljoin(current, response.headers.get("location", ""))
+                            continue
+                        if response.status_code >= 400:
+                            return None
+                        # Content-Length 先行拒绝；否则边读边计数，超限即断开（不缓冲整页）
+                        declared = response.headers.get("content-length")
+                        if declared is not None:
+                            try:
+                                if int(declared) > PAGE_BYTE_CAP:
+                                    return None
+                            except ValueError:
+                                pass
+                        chunks: list[bytes] = []
+                        total = 0
+                        for chunk in response.iter_bytes():
+                            total += len(chunk)
+                            if total > PAGE_BYTE_CAP:
+                                return None
+                            chunks.append(chunk)
+                        raw = b"".join(chunks)
+                        encoding = response.charset_encoding or "utf-8"
+                        return raw.decode(encoding, errors="replace")
                 except httpx.HTTPError:
                     return None
-                if response.is_redirect:
-                    current = urljoin(current, response.headers.get("location", ""))
-                    continue
-                if response.status_code >= 400:
-                    return None
-                if len(response.content) > PAGE_BYTE_CAP:
-                    return None  # 超大页面放弃（不解析半截 HTML）
-                return response.text
         return None
 
     def _throttle(self, host: str) -> None:
