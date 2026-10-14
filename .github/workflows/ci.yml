@@ -22,8 +22,6 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-    env:
-      TRUEORDER_DATABASE_URL: postgresql+psycopg://trueorder:trueorder@localhost:5433/trueorder
     defaults:
       run:
         working-directory: backend
@@ -42,6 +40,8 @@ jobs:
         env:
           TRUEORDER_DATABASE_URL: postgresql+psycopg://trueorder:trueorder@localhost:5433/trueorder
       - run: uv run alembic check
+        env:
+          TRUEORDER_DATABASE_URL: postgresql+psycopg://trueorder:trueorder@localhost:5433/trueorder
       - run: uv run python -m app.export_openapi
       - uses: actions/upload-artifact@v4
         with:
