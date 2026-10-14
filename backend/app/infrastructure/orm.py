@@ -249,8 +249,9 @@ class EnrichmentCallORM(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     provider: Mapped[str] = mapped_column(String(32))
-    company_id: Mapped[int] = mapped_column(
-        ForeignKey("companies.id", ondelete="CASCADE"), index=True
+    # 可空：AI 调用（税号推荐、买家发现）不针对某家企业，但同样入审计与日额度
+    company_id: Mapped[int | None] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), index=True, nullable=True
     )
     credits_used: Mapped[int] = mapped_column(Integer, default=1)
     called_at: Mapped[datetime] = mapped_column(
