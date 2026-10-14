@@ -4,14 +4,14 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Literal
 
-Audience = Literal["importer", "factory"]
+Audience = Literal["importer", "factory", "lead"]  # lead = 意向线索（非提单来源）
 BuyerType = Literal["importer", "factory", "both"]
 Tier = Literal["potential", "precise", "excluded"]
 
 
 @dataclass(frozen=True)
 class HsAssignment:
-    """产品 ↔ 税号对应关系。audience 指明这个税号面向哪类买家。"""
+    """产品 ↔ 税号对应关系。audience 指明这个税号面向哪类买家（不含 lead：意向线索无税号）。"""
 
     hs_code: str  # 6 位 HS 税号
     audience: Audience

@@ -38,11 +38,12 @@ class RescoreService:
         return self._rescore_one(product, as_of)
 
     def _rescore_one(self, product: ProductConfig, as_of: date) -> RescoreSummary:
-        # 受众 = 买家类型展开 ∪ 税号受众：未配税号的受众也能浮出来源线索
+        # 提单受众 = 买家类型 ∪ 税号受众；意向线索受众始终打分（与税号无关）
         typed: set[Audience] = (
             {"importer", "factory"} if product.buyer_type == "both" else {product.buyer_type}
         )
-        audiences = sorted(typed | {a.audience for a in product.hs_assignments})
+        bill_audiences = (typed | {a.audience for a in product.hs_assignments}) - {"lead"}
+        audiences: list[Audience] = sorted(bill_audiences | {"lead"})
         families = sorted({hs_family_prefix(a.hs_code) for a in product.hs_assignments})
         pool = self._pool.load_pool(families, as_of, product.product_id)
         results: list[ScoreResult] = []

@@ -20,7 +20,7 @@ from app.infrastructure.orm import (
 @dataclass
 class BuyerQueryFilters:
     product_id: int
-    audience: str  # importer / factory
+    audience: str  # importer / factory / lead（意向线索）
     tier: str | None = None  # potential / precise / excluded；None = 全部
     q: str | None = None  # PostgreSQL 全文检索
     country: str | None = None

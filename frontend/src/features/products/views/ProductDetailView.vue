@@ -50,23 +50,28 @@ const product = computed(
 const audienceCounts = computed(() => {
   const current = product.value;
   if (!current) return {};
-  if (current.buyer_type === "both") {
-    return current.counts_by_audience?.[audience.value] ?? {};
-  }
-  return current.counts_by_audience?.[audience.value] ?? current.counts;
+  // 始终按当前受众取计数：意向线索 / both 产品缺键 = 该受众无得分（{}），严禁回退总计数
+  return current.counts_by_audience?.[audience.value] ?? {};
 });
 
 // 空结果指引：新产品计数全 0 → 告诉用户去哪补数据
 const hasNoBills = computed(() =>
   product.value != null
-  && Object.values(audienceCounts.value).reduce((a, b) => a + b, 0) === 0,
+  && Object.values(audienceCounts.value).reduce((a: number, b: number) => a + b, 0) === 0,
 );
 
 function followProductAudience() {
   const current = product.value;
-  if (current && current.buyer_type !== "both") {
-    audience.value = current.buyer_type;
+  if (!current) return;
+  // 留在意向线索；否则落到产品买家类型（both 默认进口商）
+  if (audience.value === "lead") return;
+  if (current.buyer_type === "both") {
+    if (audience.value !== "importer" && audience.value !== "factory") {
+      audience.value = "importer";
+    }
+    return;
   }
+  audience.value = current.buyer_type;
 }
 
 function onTierChange() {
@@ -120,7 +125,10 @@ watch(
       :audience="audience"
       @update:audience="audience = $event; loadBuyers()"
     />
-    <NoBillsHint v-if="hasNoBills" />
+    <NoBillsHint
+      v-if="hasNoBills"
+      :audience="audience"
+    />
     <BuyerTabs
       :tier="filters.state.value.tier"
       :counts="audienceCounts"

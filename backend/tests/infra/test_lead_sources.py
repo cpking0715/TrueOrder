@@ -32,10 +32,12 @@ def _setup(session) -> tuple[int, int]:
     return pid, c.id
 
 
-def _score(session, pid, cid):
+def _score(session, pid, cid, audience: str = "lead"):
     return session.scalar(
         select(CompanyScoreORM).where(
-            CompanyScoreORM.product_id == pid, CompanyScoreORM.company_id == cid
+            CompanyScoreORM.product_id == pid,
+            CompanyScoreORM.company_id == cid,
+            CompanyScoreORM.audience == audience,
         )
     )
 
@@ -63,7 +65,8 @@ def test_商机为线索_流失商机不算(session):
     session.add(opp)
     session.flush()
     CsvImporter(session).rescore_one(pid, AS_OF)
-    assert _score(session, pid, cid).tier == "potential"
+    assert _score(session, pid, cid, "lead").tier == "potential"
+    assert _score(session, pid, cid, "importer") is None
     opp.stage = "lost"
     session.flush()
     CsvImporter(session).rescore_one(pid, AS_OF)

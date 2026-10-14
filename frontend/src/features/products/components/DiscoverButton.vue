@@ -13,7 +13,7 @@ async function go() {
   busy.value = true;
   try {
     const result = await discoverBuyers(props.productId);
-    hint.value = `AI 买家发现已启动（任务 #${result.job_id}）。worker 自动生成名单并补全联系方式。`;
+    hint.value = `意向线索发现已启动（任务 #${result.job_id}）。结果进「意向线索」潜在层（含个人/感兴趣对象），不升精准。`;
   } catch (e) {
     error.value = (e as Error).message;
   } finally {
@@ -27,10 +27,10 @@ async function go() {
     class="small ghost"
     :disabled="busy"
     data-testid="discover-buyers"
-    title="AI 从品名推断该行业真实进口商，自动补全联系方式（不消耗额度，不依赖提单数据）"
+    title="从品名发现可能感兴趣的对象（进口商、小买家、个人工作室等），写入「意向线索」；不升精准"
     @click="go"
   >
-    {{ busy ? "启动中…" : "AI 发现买家" }}
+    {{ busy ? "启动中…" : "AI 发现意向线索" }}
   </button>
   <span
     v-if="hint"

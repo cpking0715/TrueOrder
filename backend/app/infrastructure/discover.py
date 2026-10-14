@@ -39,28 +39,31 @@ def _record_lead(session: Session, product_id: object, company_id: int, source_r
         .on_conflict_do_nothing(constraint="uq_lead_source")
     )
 
-# 五个搜索角度：每个生成 ~20 家，合并去重后 50-100 家
+# 意向线索角度：不限进口商/分销商；个人工作室、小买家、感兴趣对象都算潜在触达对象
 DISCOVER_ANGLES = [
-    "major importers and large buyers",
-    "mid-size wholesale distributors and regional dealers",
-    "specialty, niche, and private-label buyers",
-    "department store chains and retail buying offices",
-    "import agents, trading companies, and sourcing offices",
+    "major importers and large wholesale buyers",
+    "mid-size distributors, dealers, and specialty retailers",
+    "small businesses, boutiques, and independent shops that buy or resell this product",
+    "individual professionals, studios, designers, or consultants who might purchase",
+    "online sellers, private-label brands, and niche end customers likely interested",
 ]
 
 _ANGLE_PROMPT = (
-    "List 20 real, verifiable companies that match: {angle} "
+    "List 20 real, verifiable entities that match: {angle} "
     "for the following product in the United States. "
-    "Only include companies you are confident exist. "
+    "Include companies AND named individuals / sole proprietors when they fit. "
+    "Only include entries you are confident exist. "
     "Output a JSON array:\n"
-    '{{"company_name": "legal name", "city": "city", '
-    '"state": "2-letter code", "note": "reason"}}\n'
+    '{{"company_name": "legal or personal name", "city": "city", '
+    '"state": "2-letter code", "note": "why they might buy or be interested"}}\n'
     "Rules:\n"
-    "- Real companies only\n"
+    "- Real entities only (companies or individuals)\n"
+    "- Potential interest counts — not only importers/distributors\n"
     "- Avoid retail giants (Walmart/Target/Costco)\n"
     "- Output ONLY the JSON array\n"
     "Product: {category} (HS: {hs_code})"
 )
+
 
 
 def _call_one_angle(
