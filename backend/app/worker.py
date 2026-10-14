@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.core.config import get_settings
+from app.core.config import get_settings, require_configured_database
 from app.core.logging import configure_logging, get_logger
 from app.infrastructure.db import make_engine, make_session_factory
 from app.infrastructure.jobs import Handler, SqlJobQueue, Worker
@@ -73,6 +73,7 @@ def main() -> None:
     args = parser.parse_args()
 
     configure_logging()
+    require_configured_database()
     engine = make_engine(get_settings().database_url)
     factory = make_session_factory(engine)
     handlers = build_handlers()

@@ -83,3 +83,14 @@ def read_csv_upload(
     except UnicodeDecodeError as exc:
         raise HTTPException(status_code=422, detail=f"CSV 必须是 UTF-8：{exc}") from exc
     return CsvUpload(text=text, filename=file.filename or "upload")
+
+
+def default_audience(queries: SqlBuyerQueries, product_id: int) -> str:
+    """产品买家类型 → 默认受众；产品不存在抛 404。both 产品默认 importer。"""
+    buyer_type = queries.get_product_buyer_type(product_id)
+    if buyer_type is None:
+        raise HTTPException(status_code=404, detail=f"产品 {product_id} 不存在")
+    if buyer_type in ("importer", "factory"):
+        return buyer_type
+    return "importer"
+

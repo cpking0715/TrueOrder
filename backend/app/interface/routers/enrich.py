@@ -10,9 +10,13 @@ from app.core.config import Settings, get_settings
 from app.infrastructure.contact_repository import SqlContactRepository
 from app.infrastructure.enrichment import SqlEnrichmentLog
 from app.infrastructure.jobs import SqlJobQueue
-from app.infrastructure.orm import CompanyORM
 from app.infrastructure.queries import BuyerQueryFilters, SqlBuyerQueries
-from app.interface.deps import get_buyer_queries, get_contact_repository, get_session
+from app.interface.deps import (
+    default_audience,
+    get_buyer_queries,
+    get_contact_repository,
+    get_session,
+)
 from app.interface.schemas import CompanyWebsiteOut
 
 router = APIRouter(prefix="/api", tags=["enrich"])
@@ -55,11 +59,9 @@ class EnrichUsageOut(BaseModel):
     remaining: int
 
 
-def _get_company(session: Session, company_id: int) -> CompanyORM:
-    company = session.get(CompanyORM, company_id)
-    if company is None:
+def _require_company(repo: SqlContactRepository, company_id: int) -> None:
+    if not repo.company_exists(company_id):
         raise HTTPException(status_code=404, detail=f"公司 {company_id} 不存在")
-    return company
 
 
 @router.post("/companies/{company_id}/find-contacts", response_model=JobCreatedOut, status_code=202)
@@ -67,11 +69,12 @@ def find_contacts(
     company_id: int,
     method: str = "finder",
     session: Session = Depends(get_session),
+    repo: SqlContactRepository = Depends(get_contact_repository),
 ):
     """对单个选定企业触发补全：finder=按域名/公司名查联系人，website=抓官网公开页。"""
     if method not in ("finder", "website"):
         raise HTTPException(status_code=422, detail="method 必须是 finder 或 website")
-    _get_company(session, company_id)
+    _require_company(repo, company_id)
     kind = "find_contacts" if method == "finder" else "crawl_website"
     queue = SqlJobQueue(session)
     job_id = queue.enqueue(kind, {"company_id": company_id})
@@ -87,14 +90,13 @@ def confirm_website(
     result = repo.update_website(company_id, None, True)
     if result is None:
         raise HTTPException(status_code=404, detail=f"公司 {company_id} 不存在")
-    website, confirmed = result
-    company = _get_company(repo._session, company_id)  # noqa: SLF001 - 取置信度展示
+    website, confirmed, source, confidence = result
     return CompanyWebsiteOut(
         company_id=company_id,
         website=website,
         website_confirmed=confirmed,
-        website_source=company.website_source,
-        website_confidence=company.website_confidence,
+        website_source=source,
+        website_confidence=confidence,
     )
 
 
@@ -125,9 +127,8 @@ def enrich_buyers(
     settings: Settings = Depends(get_settings),
 ):
     """批量补全当前筛选的前 N 家：不带 confirm 只返回额度估计；confirm=true 才入队。"""
-    from app.interface.routers.products import _default_audience
-
-    audience = _default_audience(queries, product_id)
+    
+    audience = default_audience(queries, product_id)
     tiers = [payload.tier] if payload.tier else ["potential", "precise"]
     buyers: list = []
     for tier in tiers:

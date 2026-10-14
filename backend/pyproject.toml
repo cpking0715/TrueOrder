@@ -14,13 +14,16 @@ dependencies = [
     "python-multipart>=0.0.32",
     "sqlalchemy>=2.0",
     "uvicorn[standard]>=0.54.0",
+    # 爬虫 DNS 钉扎依赖 httpcore 私有后端；锁次要版本，升级需重跑 crawler SSRF 测试
+    "httpx>=0.28.1,<0.29",
+    "httpcore>=1.0.9,<1.1",
 ]
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28.1",
     "pytest>=9.1.1",
     "ruff>=0.16.10",
+    "mypy>=1.15.0",
 ]
 
 [tool.pytest.ini_options]
@@ -37,7 +40,7 @@ target-version = "py313"
 extend-exclude = ["alembic/versions"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
 
 [tool.ruff.lint.per-file-ignores]
 # FastAPI 依赖注入的标准写法是 Depends(...) 作为参数默认值
@@ -46,3 +49,22 @@ select = ["E", "F", "I", "UP", "B"]
 "tests/infra/test_importer.py" = ["E501"]
 "tests/infra/test_queries.py" = ["E501"]
 "tests/interface/test_api.py" = ["E501"]
+
+
+[tool.mypy]
+python_version = "3.13"
+mypy_path = "."
+packages = ["app"]
+# 先对 domain 开严格；其余层逐步收紧（见 PR 说明）
+[[tool.mypy.overrides]]
+module = "app.domain.*"
+disallow_untyped_defs = true
+warn_return_any = true
+no_implicit_optional = true
+# 本 PR 先把门禁立起来；下列码在后续 PR 收紧（见 PR 正文剩余工作）
+disable_error_code = ["type-arg", "no-any-return", "arg-type", "unused-ignore", "no-untyped-def"]
+
+
+[[tool.mypy.overrides]]
+module = ["app.infrastructure.*", "app.interface.*", "app.core.*", "app.bootstrap", "app.worker", "app.export_openapi"]
+ignore_errors = true

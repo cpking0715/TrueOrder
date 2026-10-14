@@ -215,7 +215,12 @@ class SqlContactRepository:
             company.website_confirmed = confirmed
         self._session.flush()
         self._session.commit()
-        return company.website, bool(company.website_confirmed)
+        return (
+            company.website,
+            bool(company.website_confirmed),
+            company.website_source or "",
+            company.website_confidence or "",
+        )
 
     # ---------- CSV 导入 ----------
 

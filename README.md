@@ -18,6 +18,17 @@
 
 ## 快速开始
 
+### 0. Docker Compose（可选）
+
+```bash
+cp .env.example .env   # 至少填 TRUEORDER_API_TOKEN；发信再填 COMPANY_ADDRESS / SMTP_*
+docker compose up --build
+# API http://localhost:8000  ；worker 同栈；Ctrl-C 后 worker 会优雅停
+```
+
+生产/非样本：`TRUEORDER_SAMPLE_MODE=false` 时必须显式设置 `TRUEORDER_DATABASE_URL`（否则进程拒绝启动）。
+`bootstrap --drop` 仅在样本模式且库地址像本机时可用。
+
 ### 1. 数据库（一次性）
 
 ```bash

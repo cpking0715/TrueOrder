@@ -49,3 +49,15 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def require_configured_database(settings: Settings | None = None) -> Settings:
+    """生产/非样本模式：禁止静默落到源码默认库地址。"""
+    settings = settings or get_settings()
+    default_marker = "trueorder:trueorder@localhost:5433/trueorder"
+    if not settings.sample_mode and default_marker in settings.database_url:
+        raise RuntimeError(
+            "非样本模式必须显式设置 TRUEORDER_DATABASE_URL（当前仍是源码默认本机地址）"
+        )
+    return settings
+
