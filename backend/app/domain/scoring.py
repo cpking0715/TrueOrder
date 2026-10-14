@@ -97,6 +97,24 @@ def _bill_ids(bills: Iterable[BillEvidence]) -> tuple[int, ...]:
     return tuple(b.bill_id for b in bills)
 
 
+def _source_lead(product: ProductConfig, facts: CompanyFacts) -> ScoreResult:
+    """意向线索受众：只凭来源入潜在，永不升精准。"""
+    labels = "、".join(dict.fromkeys(s.label for s in facts.lead_sources))
+    return ScoreResult(
+        product_id=product.product_id,
+        company_id=facts.company_id,
+        audience="lead",
+        tier="potential",
+        reasons=(
+            ScoreReason(
+                "SOURCE_LEAD",
+                f"意向线索：{labels}；个人/感兴趣对象亦可，批量触达前请核对合规；升精准仍需该税号合格提单",
+                (),
+            ),
+        ),
+    )
+
+
 def _excluded(
     product: ProductConfig,
     facts: CompanyFacts,
@@ -115,13 +133,52 @@ def _excluded(
     )
 
 
+def _score_lead_audience(product: ProductConfig, facts: CompanyFacts) -> ScoreResult:
+    """意向线索：排除抬头伪公司后，凭来源入潜在；无提单分层、不升精准。"""
+    norm_variants = [normalize_company_name(v) for v in facts.name_variants] or [
+        facts.normalized_name
+    ]
+    real_variants = [v for v in norm_variants if not _is_blank_consignee(v)]
+    if not real_variants:
+        return _excluded(
+            product,
+            facts,
+            "lead",
+            "EX_BLANK_CONSIGNEE",
+            "名称为空抬头（TO THE ORDER OF），无真实对象",
+            (),
+        )
+    business_text = _squash(" ".join(real_variants) + " " + facts.address)
+    name_tokens = {tok for v in real_variants for tok in v.split()}
+    text_tokens = name_tokens | set(business_text.split())
+    if name_tokens & BANK_TOKENS:
+        return _excluded(
+            product, facts, "lead", "EX_BANK", "名称为银行（不宜作触达对象）", ()
+        )
+    if text_tokens & FORWARDER_TOKENS:
+        return _excluded(
+            product, facts, "lead", "EX_FORWARDER", "名称/地址含货代特征词", ()
+        )
+    return _source_lead(product, facts)
+
+
 def score_company(
     product: ProductConfig,
     audience: Audience,
     facts: CompanyFacts,
     as_of: date,
 ) -> ScoreResult | None:
-    """对企业按产品受众打分。返回 None 表示既不入池也无排除价值（如仅旧票）。"""
+    """对企业按产品受众打分。返回 None 表示既不入池也无排除价值（如仅旧票）。
+
+    受众分两类：
+    - importer / factory：只按税号合格提单分层（潜在/精准/排除）；非提单线索不混入。
+    - lead（意向线索）：只凭非提单来源入潜在；含个人/感兴趣对象；永不升精准。
+    """
+    if audience == "lead":
+        if not facts.lead_sources:
+            return None
+        return _score_lead_audience(product, facts)
+
     codes_for_audience = {a.hs_code for a in product.hs_assignments if a.audience == audience}
     if not codes_for_audience:
         return None

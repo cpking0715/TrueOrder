@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
-from app.domain.entities import ProductConfig, ScoreResult
+from app.domain.entities import Audience, ProductConfig, ScoreResult
 from app.domain.normalize import hs_family_prefix
 from app.domain.ports import BuyerPoolReader, ProductReader, ScoreWriter
 from app.domain.scoring import score_company
@@ -38,9 +38,14 @@ class RescoreService:
         return self._rescore_one(product, as_of)
 
     def _rescore_one(self, product: ProductConfig, as_of: date) -> RescoreSummary:
-        audiences = sorted({a.audience for a in product.hs_assignments})
+        # 提单受众 = 买家类型 ∪ 税号受众；意向线索受众始终打分（与税号无关）
+        typed: set[Audience] = (
+            {"importer", "factory"} if product.buyer_type == "both" else {product.buyer_type}
+        )
+        bill_audiences = (typed | {a.audience for a in product.hs_assignments}) - {"lead"}
+        audiences: list[Audience] = sorted(bill_audiences | {"lead"})
         families = sorted({hs_family_prefix(a.hs_code) for a in product.hs_assignments})
-        pool = self._pool.load_pool(families, as_of)
+        pool = self._pool.load_pool(families, as_of, product.product_id)
         results: list[ScoreResult] = []
         for audience in audiences:
             for facts in pool:

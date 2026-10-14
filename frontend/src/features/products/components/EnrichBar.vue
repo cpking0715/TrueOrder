@@ -16,6 +16,7 @@ const usage = ref<string>("");
 function buildRequest(confirm: boolean) {
   return {
     tier: props.query.tier,
+    audience: props.query.audience,
     q: props.query.q,
     country: props.query.country,
     min_shipments: props.query.minShipments,

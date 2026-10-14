@@ -102,15 +102,38 @@ describe("EnrichBar 批量补全", () => {
   });
 });
 
+describe("EnrichBar 受众", () => {
+  it("意向线索页签的估计请求带 audience=lead", async () => {
+    vi.mocked(fetchEnrichUsage).mockRejectedValue(new Error("ignore"));
+    vi.mocked(enrichBuyers).mockResolvedValue({
+      candidates: 1, skipped_has_contacts: 0, skipped_queried_recently: 0,
+      capped_by_quota: 0, credits_needed: 1, daily_cap: 20, used_today: 0,
+      enqueued: 0, job_ids: [],
+    });
+    render(EnrichBar, { props: { productId: 2, query: { audience: "lead" } } });
+    await fireEvent.click(screen.getByTestId("enrich-estimate"));
+    await screen.findByTestId("enrich-estimate-text");
+    expect(enrichBuyers).toHaveBeenCalledWith(2, expect.objectContaining({ audience: "lead" }));
+  });
+});
+
 describe("ContactsPanel 查找按钮", () => {
   it("查找联系方式入队并显示任务提示", async () => {
     vi.mocked(fetchContacts).mockResolvedValue([]);
     vi.mocked(requestFindContacts).mockResolvedValue({ job_id: 7, kind: "find_contacts" });
     render(ContactsPanel, { props: { companyId: 9 } });
     await fireEvent.click(screen.getByTestId("find-contacts"));
-    expect(requestFindContacts).toHaveBeenCalledWith(9, "finder");
+    expect(requestFindContacts).toHaveBeenCalledWith(9, "finder", undefined);
     const hint = await screen.findByTestId("enqueued-hint");
     expect(hint.textContent).toContain("#7");
+  });
+
+  it("产品上下文下查找带 productId", async () => {
+    vi.mocked(fetchContacts).mockResolvedValue([]);
+    vi.mocked(requestFindContacts).mockResolvedValue({ job_id: 8, kind: "crawl_website" });
+    render(ContactsPanel, { props: { companyId: 9, productId: 4 } });
+    await fireEvent.click(screen.getByTestId("find-contacts"));
+    expect(requestFindContacts).toHaveBeenCalledWith(9, "finder", 4);
   });
 
   it("抓取官网走 website 方法", async () => {
@@ -119,7 +142,7 @@ describe("ContactsPanel 查找按钮", () => {
     render(ContactsPanel, { props: { companyId: 9 } });
     await fireEvent.click(screen.getByTestId("crawl-website"));
     await waitFor(() => {
-      expect(requestFindContacts).toHaveBeenCalledWith(9, "website");
+      expect(requestFindContacts).toHaveBeenCalledWith(9, "website", undefined);
     });
   });
 });

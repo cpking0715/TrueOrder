@@ -39,6 +39,7 @@ class EnrichEstimateOut(BaseModel):
 
 class EnrichConfirmIn(BaseModel):
     tier: str | None = None
+    audience: str | None = None  # 缺省 = 产品默认提单受众；lead = 意向线索列表
     q: str | None = None
     country: str | None = None
     min_shipments: int | None = Field(default=None, ge=1)
@@ -68,6 +69,7 @@ def _require_company(repo: SqlContactRepository, company_id: int) -> None:
 def find_contacts(
     company_id: int,
     method: str = "finder",
+    product_id: int | None = None,
     session: Session = Depends(get_session),
     repo: SqlContactRepository = Depends(get_contact_repository),
 ):
@@ -77,7 +79,10 @@ def find_contacts(
     _require_company(repo, company_id)
     kind = "find_contacts" if method == "finder" else "crawl_website"
     queue = SqlJobQueue(session)
-    job_id = queue.enqueue(kind, {"company_id": company_id})
+    payload: dict[str, int] = {"company_id": company_id}
+    if product_id:
+        payload["product_id"] = product_id  # 产品上下文：补全到的联系人记为该产品线索
+    job_id = queue.enqueue(kind, payload)
     return JobCreatedOut(job_id=job_id, kind=kind)
 
 
@@ -127,8 +132,10 @@ def enrich_buyers(
     settings: Settings = Depends(get_settings),
 ):
     """批量补全当前筛选的前 N 家：不带 confirm 只返回额度估计；confirm=true 才入队。"""
-    
-    audience = default_audience(queries, product_id)
+
+    audience = payload.audience or default_audience(queries, product_id)
+    if audience not in ("importer", "factory", "lead"):
+        raise HTTPException(status_code=422, detail="audience 必须是 importer、factory 或 lead")
     tiers = [payload.tier] if payload.tier else ["potential", "precise"]
     buyers: list = []
     for tier in tiers:
@@ -151,8 +158,7 @@ def enrich_buyers(
     queried = log.companies_queried_within([b.company_id for b in candidates])
     has_contacts = repo.companies_with_contacts([b.company_id for b in candidates])
     eligible = [
-        b for b in candidates
-        if b.company_id not in has_contacts and b.company_id not in queried
+        b for b in candidates if b.company_id not in has_contacts and b.company_id not in queried
     ]
 
     used = log.calls_today()
@@ -174,6 +180,9 @@ def enrich_buyers(
         return estimate
 
     queue = SqlJobQueue(session)
-    job_ids = [queue.enqueue("find_contacts", {"company_id": b.company_id}) for b in eligible]
+    job_ids = [
+        queue.enqueue("find_contacts", {"company_id": b.company_id, "product_id": product_id})
+        for b in eligible
+    ]
     executed = EnrichExecutedOut(**estimate.__dict__, enqueued=len(job_ids), job_ids=job_ids)
     return executed

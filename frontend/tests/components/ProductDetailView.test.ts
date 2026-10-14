@@ -44,7 +44,7 @@ const productFixture: Product = {
   buyer_type: "importer",
   hs_codes: [{ hs_code: "620462", audience: "importer", note: "成衣税号" }],
   counts: { potential: 2, precise: 1, excluded: 6 },
-  counts_by_audience: {},
+  counts_by_audience: { importer: { potential: 2, precise: 1, excluded: 6 } },
 };
 
 const buyersByTier: Record<string, Buyer[]> = {
@@ -227,7 +227,7 @@ describe("产品详情页（用户可见结果）", () => {
     const hint = await screen.findByTestId("no-bills-hint");
     expect(hint.textContent).toContain("库里还没有该税号的提单");
     expect(hint.textContent).toContain("导入提单");
-    expect(hint.textContent).toContain("AI 买家发现");
+    expect(hint.textContent).toMatch(/意向线索|AI/);
   });
 
   it("计数非 0 的产品不显示导入指引", async () => {
@@ -361,7 +361,7 @@ describe("产品详情页（用户可见结果）", () => {
       buyer_type: "factory",
       hs_codes: [{ hs_code: "480810", audience: "factory", note: "原料税号" }],
       counts: { potential: 2, precise: 2, excluded: 0 },
-      counts_by_audience: {},
+      counts_by_audience: { factory: { potential: 2, precise: 2, excluded: 0 } },
     };
     vi.mocked(fetchProducts).mockResolvedValue([productFixture, boardProduct]);
     vi.mocked(fetchBuyers).mockImplementation(async (id, query) => {

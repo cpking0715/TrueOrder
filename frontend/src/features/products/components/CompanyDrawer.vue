@@ -139,6 +139,7 @@ function backToReasons() {
         <AcquireSection
           :company="detail.company"
           :opportunity="opportunity"
+          :product-id="productId"
           @confirmed="reload"
           @changed="emit('opportunityChanged')"
         />

@@ -4,14 +4,14 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Literal
 
-Audience = Literal["importer", "factory"]
+Audience = Literal["importer", "factory", "lead"]  # lead = 意向线索（非提单来源）
 BuyerType = Literal["importer", "factory", "both"]
 Tier = Literal["potential", "precise", "excluded"]
 
 
 @dataclass(frozen=True)
 class HsAssignment:
-    """产品 ↔ 税号对应关系。audience 指明这个税号面向哪类买家。"""
+    """产品 ↔ 税号对应关系。audience 指明这个税号面向哪类买家（不含 lead：意向线索无税号）。"""
 
     hs_code: str  # 6 位 HS 税号
     audience: Audience
@@ -47,6 +47,18 @@ class BillEvidence:
 
 
 @dataclass(frozen=True)
+class LeadSource:
+    """非提单来源的产品线索（如 AI 买家发现、手动加入跟进）。
+
+    kind：ai_discover | opportunity；label：给人看的来源说明；ref：可追溯标识（任务 id 等）。
+    """
+
+    kind: str
+    label: str
+    ref: str = ""
+
+
+@dataclass(frozen=True)
 class CompanyFacts:
     """一家企业（规范化名称 + 国家识别）在某产品上下文里的全部事实。"""
 
@@ -56,6 +68,8 @@ class CompanyFacts:
     address: str
     country: str
     bills: tuple[BillEvidence, ...] = ()
+    # 该企业在当前产品上的非提单来源线索（无合格提单时据此入潜在层，永不升精准）
+    lead_sources: tuple[LeadSource, ...] = ()
 
 
 @dataclass(frozen=True)

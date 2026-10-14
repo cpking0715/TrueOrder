@@ -338,6 +338,19 @@ def make_verify_email_handler(
     return handler
 
 
+def with_contact_leads(handler):
+    """补全成功后：payload 带 product_id 时，按企业联系人来源记该产品线索（无则不扇出）。"""
+
+    def wrapped(session: Session, payload: dict) -> None:
+        handler(session, payload)
+        from app.infrastructure.lead_sources import record_contact_leads
+
+        if record_contact_leads(session, payload.get("product_id"), int(payload["company_id"])):
+            session.commit()
+
+    return wrapped
+
+
 def build_registry(
     settings: Settings | None = None,
     finder: ContactFinderProtocol | None = None,
@@ -359,10 +372,10 @@ def build_registry(
             return False
 
     return {
-        "find_contacts": make_find_contacts_handler(
-            finder, settings, directory, domain_guesser=_probe_domain,
+        "find_contacts": with_contact_leads(
+            make_find_contacts_handler(finder, settings, directory, domain_guesser=_probe_domain)
         ),
-        "crawl_website": make_crawl_website_handler(crawler, settings),
+        "crawl_website": with_contact_leads(make_crawl_website_handler(crawler, settings)),
         "verify_email": make_verify_email_handler(finder, settings),
         "discover_buyers": make_discover_buyers_handler(settings),
     }  # send_email 由 outreach 模块单独注册

@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import type { Product } from "@/api/products";
 
-defineProps<{ product: Product; audience: string }>();
+const props = defineProps<{ product: Product; audience: string }>();
 const emit = defineEmits<{ "update:audience": [value: string] }>();
 
 const buyerTypeLabel: Record<string, string> = {
@@ -9,11 +10,30 @@ const buyerTypeLabel: Record<string, string> = {
   factory: "卖给工厂",
   both: "两者都卖",
 };
+
+const audienceLabel: Record<string, string> = {
+  importer: "进口商视角",
+  factory: "工厂视角",
+  lead: "意向线索",
+};
+
+/** 提单受众随买家类型；意向线索始终可选（AI 发现 / 跟进等非提单来源）。 */
+const billAudiences = computed(() => {
+  if (props.product.buyer_type === "both") return ["importer", "factory"] as const;
+  if (props.product.buyer_type === "factory") return ["factory"] as const;
+  return ["importer"] as const;
+});
+
+const eyebrow = computed(() => {
+  if (props.audience === "lead") return "意向线索 · INTERESTED LEADS";
+  if (props.audience === "factory") return "FACTORY BUYERS";
+  return "IMPORTERS";
+});
 </script>
 
 <template>
   <p class="eyebrow">
-    HS {{ product.hs_codes.map((h) => h.hs_code).join(" / ") }} · {{ audience === "factory" ? "FACTORY BUYERS" : "IMPORTERS" }}
+    HS {{ product.hs_codes.map((h) => h.hs_code).join(" / ") || "—" }} · {{ eyebrow }}
   </p>
   <h1>{{ product.name }}</h1>
   <p class="muted">
@@ -40,21 +60,26 @@ const buyerTypeLabel: Record<string, string> = {
     {{ hs.note }}
   </p>
   <div
-    v-if="product.buyer_type === 'both'"
     class="filterbar"
+    data-testid="audience-switch"
   >
     <span class="muted">受众：</span>
     <button
-      :class="{ primary: audience === 'importer' }"
-      @click="emit('update:audience', 'importer')"
+      v-for="a in billAudiences"
+      :key="a"
+      :class="{ primary: audience === a }"
+      :data-testid="`audience-${a}`"
+      @click="emit('update:audience', a)"
     >
-      进口商视角
+      {{ audienceLabel[a] }}
     </button>
     <button
-      :class="{ primary: audience === 'factory' }"
-      @click="emit('update:audience', 'factory')"
+      :class="{ primary: audience === 'lead' }"
+      data-testid="audience-lead"
+      title="AI 发现、手动跟进等非提单来源；含个人/感兴趣对象；不升精准"
+      @click="emit('update:audience', 'lead')"
     >
-      工厂视角
+      意向线索
     </button>
   </div>
 </template>

@@ -9,7 +9,11 @@ import SendEmailSection from "../../outreach/components/SendEmailSection.vue";
 import ContactsPanel from "./ContactsPanel.vue";
 import WebsiteField from "./WebsiteField.vue";
 
-const props = defineProps<{ company: CompanyDetail["company"]; opportunity?: Opportunity | null }>();
+const props = defineProps<{
+  company: CompanyDetail["company"];
+  opportunity?: Opportunity | null;
+  productId?: number;
+}>();
 const emit = defineEmits<{ confirmed: []; changed: [] }>();
 
 const contacts = ref<Contact[]>([]);
@@ -36,7 +40,10 @@ watch(() => props.company.company_id, () => void loadContacts(), { immediate: tr
     />
   </section>
   <section id="drawer-contacts">
-    <ContactsPanel :company-id="company.company_id" />
+    <ContactsPanel
+      :company-id="company.company_id"
+      :product-id="productId"
+    />
   </section>
   <FollowUpSection
     v-if="opportunity"

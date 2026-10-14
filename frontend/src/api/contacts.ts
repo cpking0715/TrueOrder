@@ -21,8 +21,14 @@ export async function fetchContacts(companyId: number): Promise<Contact[]> {
   return requestJson<Contact[]>(`/api/companies/${companyId}/contacts`);
 }
 
-export async function createContact(companyId: number, payload: ContactCreate): Promise<Contact> {
-  return requestJson<Contact>(`/api/companies/${companyId}/contacts`, {
+/** productId：从产品页抽屉添加时传入，后端记为该产品的意向线索（不传则不关联任何产品）。 */
+export async function createContact(
+  companyId: number,
+  payload: ContactCreate,
+  productId?: number,
+): Promise<Contact> {
+  const search = productId ? `?product_id=${productId}` : "";
+  return requestJson<Contact>(`/api/companies/${companyId}/contacts${search}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -70,6 +76,7 @@ export type EnrichEstimate = components["schemas"]["EnrichExecutedOut"];
 
 export interface EnrichRequest {
   tier?: string;
+  audience?: string;
   q?: string;
   country?: string;
   min_shipments?: number;
@@ -81,8 +88,10 @@ export interface EnrichRequest {
 export async function requestFindContacts(
   companyId: number,
   method: "finder" | "website" = "finder",
+  productId?: number,
 ): Promise<{ job_id: number; kind: string }> {
-  return requestJson(`/api/companies/${companyId}/find-contacts?method=${method}`, {
+  const product = productId ? `&product_id=${productId}` : "";
+  return requestJson(`/api/companies/${companyId}/find-contacts?method=${method}${product}`, {
     method: "POST",
   });
 }

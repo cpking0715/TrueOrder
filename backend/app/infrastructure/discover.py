@@ -6,7 +6,10 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
@@ -16,32 +19,51 @@ from app.domain.entities import DiscoveredBuyer
 from app.domain.normalize import normalize_company_name, normalize_country
 from app.infrastructure.jobs import SqlJobQueue
 from app.infrastructure.llm_client import AiQuota, LlmClient
-from app.infrastructure.orm import CompanyORM
+from app.infrastructure.orm import CompanyLeadSourceORM, CompanyORM
 
 log = get_logger("app.discover")
 
-# 五个搜索角度：每个生成 ~20 家，合并去重后 50-100 家
+
+def _record_lead(session: Session, product_id: object, company_id: int, source_ref: str) -> None:
+    """记录「AI 发现」线索（产品×企业唯一，重复发现幂等）。无 product_id 的旧任务跳过。"""
+    if not product_id:
+        return
+    session.execute(
+        pg_insert(CompanyLeadSourceORM)
+        .values(
+            product_id=int(str(product_id)),
+            company_id=company_id,
+            source="ai_discover",
+            source_ref=source_ref,
+        )
+        .on_conflict_do_nothing(constraint="uq_lead_source")
+    )
+
+# 意向线索角度：不限进口商/分销商；个人工作室、小买家、感兴趣对象都算潜在触达对象
 DISCOVER_ANGLES = [
-    "major importers and large buyers",
-    "mid-size wholesale distributors and regional dealers",
-    "specialty, niche, and private-label buyers",
-    "department store chains and retail buying offices",
-    "import agents, trading companies, and sourcing offices",
+    "major importers and large wholesale buyers",
+    "mid-size distributors, dealers, and specialty retailers",
+    "small businesses, boutiques, and independent shops that buy or resell this product",
+    "individual professionals, studios, designers, or consultants who might purchase",
+    "online sellers, private-label brands, and niche end customers likely interested",
 ]
 
 _ANGLE_PROMPT = (
-    "List 20 real, verifiable companies that match: {angle} "
+    "List 20 real, verifiable entities that match: {angle} "
     "for the following product in the United States. "
-    "Only include companies you are confident exist. "
+    "Include companies AND named individuals / sole proprietors when they fit. "
+    "Only include entries you are confident exist. "
     "Output a JSON array:\n"
-    '{{"company_name": "legal name", "city": "city", '
-    '"state": "2-letter code", "note": "reason"}}\n'
+    '{{"company_name": "legal or personal name", "city": "city", '
+    '"state": "2-letter code", "note": "why they might buy or be interested"}}\n'
     "Rules:\n"
-    "- Real companies only\n"
+    "- Real entities only (companies or individuals)\n"
+    "- Potential interest counts — not only importers/distributors\n"
     "- Avoid retail giants (Walmart/Target/Costco)\n"
     "- Output ONLY the JSON array\n"
     "Product: {category} (HS: {hs_code})"
 )
+
 
 
 def _call_one_angle(
@@ -106,6 +128,8 @@ def make_discover_buyers_handler(settings: Settings | None = None):
         buyers = batch_discover(category, hs_code, cfg, quota=quota)
 
         queue = SqlJobQueue(session)
+        product_id = payload.get("product_id")
+        source_ref = f"discover_buyers:{category[:200]}"
         for buyer in buyers:
             normalized = normalize_company_name(buyer.company_name)
             country = normalize_country(buyer.country) or "US"
@@ -116,6 +140,8 @@ def make_discover_buyers_handler(settings: Settings | None = None):
                 )
             )
             if existing:
+                # 已在库的企业不重复建/补全，但仍记为本产品的发现线索
+                _record_lead(session, product_id, existing, source_ref)
                 continue
             company = CompanyORM(
                 normalized_name=normalized,
@@ -126,8 +152,17 @@ def make_discover_buyers_handler(settings: Settings | None = None):
             )
             session.add(company)
             session.flush()
-            queue.enqueue("find_contacts", {"company_id": company.id})
+            _record_lead(session, product_id, company.id, source_ref)
+            queue.enqueue(
+                "find_contacts",
+                {"company_id": company.id, **({"product_id": product_id} if product_id else {})},
+            )
 
         session.commit()
+        if product_id:
+            # 让发现的企业立即以 SOURCE_LEAD 出现在该产品潜在层（不必等下一次全量重打分）
+            from app.infrastructure.importers import CsvImporter
+
+            CsvImporter(session).rescore_one(int(product_id), date.today())
 
     return handler

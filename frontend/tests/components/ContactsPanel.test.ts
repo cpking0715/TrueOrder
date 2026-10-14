@@ -75,8 +75,20 @@ describe("ContactsPanel", () => {
     await fireEvent.submit(screen.getByTestId("contact-form"));
     await waitFor(() => expect(createContact).toHaveBeenCalledWith(10, {
       name: "John Smith", title: "", email: "john@example.com", phone: null,
-    }));
+    }, undefined));
     await screen.findByTestId("contact-row-1");
+  });
+
+  it("产品页抽屉内新增联系人带 productId（记为该产品线索）", async () => {
+    vi.mocked(fetchContacts).mockResolvedValue([]);
+    vi.mocked(createContact).mockResolvedValue(contactFixture());
+    render(ContactsPanel, { props: { companyId: 10, productId: 3 } });
+    await screen.findByText(/暂无联系人/);
+    await fireEvent.click(screen.getByTestId("add-contact"));
+    await fireEvent.update(screen.getByTestId("contact-name"), "Ann");
+    await fireEvent.update(screen.getByTestId("contact-email"), "ann@example.com");
+    await fireEvent.submit(screen.getByTestId("contact-form"));
+    await waitFor(() => expect(createContact).toHaveBeenCalledWith(10, expect.anything(), 3));
   });
 
   it("标记不再联系调用更新并刷新", async () => {

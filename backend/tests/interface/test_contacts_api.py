@@ -42,6 +42,37 @@ class Test联系人CRUD:
         assert body["is_generic"] is False
         assert body["source"] == "manual"
 
+    def test_产品页添加联系人记该产品线索并进意向线索(self, client):
+        ids = _seed(client)
+        cid, pid = ids["company_id"], ids["product_id"]
+        r = client.post(
+            f"/api/companies/{cid}/contacts",
+            params={"product_id": pid},
+            json={"name": "Ann", "email": "ann@lead.example"},
+        )
+        assert r.status_code == 201, r.text
+        from app.infrastructure.importers import CsvImporter
+        from app.interface.deps import get_session
+
+        session = next(client.app.dependency_overrides[get_session]())
+        CsvImporter(session).rescore_one(pid, __import__("datetime").date(2026, 10, 9))
+        leads = client.get(
+            f"/api/products/{pid}/buyers", params={"audience": "lead", "tier": "potential"}
+        ).json()
+        assert cid in {b["company_id"] for b in leads["items"]}
+
+    def test_无产品上下文添加联系人不记线索(self, client):
+        ids = _seed(client)
+        cid, pid = ids["company_id"], ids["product_id"]
+        client.post(f"/api/companies/{cid}/contacts", json={"name": "B", "email": "b@x.example"})
+        from app.infrastructure.importers import CsvImporter
+        from app.interface.deps import get_session
+
+        session = next(client.app.dependency_overrides[get_session]())
+        CsvImporter(session).rescore_one(pid, __import__("datetime").date(2026, 10, 9))
+        leads = client.get(f"/api/products/{pid}/buyers", params={"audience": "lead"}).json()
+        assert leads["total"] == 0
+
     def test_通用邮箱自动打标签(self, client):
         ids = _seed(client)
         r = client.post(

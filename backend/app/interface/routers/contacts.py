@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.infrastructure.contact_repository import SqlContactRepository
 from app.infrastructure.import_jobs import enqueue_import
+from app.infrastructure.lead_sources import record_contact_leads
 from app.infrastructure.queries import BuyerQueryFilters, SqlBuyerQueries
 from app.interface.csv_safety import sanitize_csv_cell
 from app.interface.deps import (
@@ -65,8 +66,11 @@ def list_contacts(
 def add_contact(
     company_id: int,
     payload: ContactCreateIn,
+    product_id: int | None = None,
     repo: SqlContactRepository = Depends(get_contact_repository),
+    session: Session = Depends(get_session),
 ):
+    """手动录入；带 product_id（从产品页抽屉添加）时记为该产品的 contact_manual 线索。"""
     if not repo.company_exists(company_id):
         raise HTTPException(status_code=404, detail=f"公司 {company_id} 不存在")
     result = repo.add(
@@ -81,6 +85,8 @@ def add_contact(
         raise HTTPException(status_code=422, detail="邮箱格式非法")
     if result.error == "duplicate":
         raise HTTPException(status_code=409, detail={"message": "该公司已有此邮箱的联系人"})
+    if product_id and record_contact_leads(session, product_id, company_id):
+        session.commit()
     return _to_out(result.contact)
 
 
@@ -158,8 +164,8 @@ def export_contacts(
     """
     if audience is None:
         audience = default_audience(queries, product_id)
-    if audience not in ("importer", "factory"):
-        raise HTTPException(status_code=422, detail="audience 必须是 importer 或 factory")
+    if audience not in ("importer", "factory", "lead"):
+        raise HTTPException(status_code=422, detail="audience 必须是 importer、factory 或 lead")
     filters = BuyerQueryFilters(
         product_id=product_id,
         audience=audience,
