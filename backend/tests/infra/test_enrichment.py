@@ -291,7 +291,8 @@ class Test审阅修复轮WP4:
             "verify_email": __import__("app.infrastructure.enrichment", fromlist=["x"])
             .make_verify_email_handler(finder, CFG_KEY),
         }
-        Worker(queue, handlers).run_once(NOW)
+        # batch=1：只跑 find_contacts（逐个认领后同一轮会接着消费新排的 verify）
+        Worker(queue, handlers).run_once(NOW, batch=1)
         verify_jobs = queue.list_jobs(status="pending")
         assert any(j.kind == "verify_email" for j in verify_jobs), "应排 verify_email（P0 回归）"
         Worker(queue, handlers).run_once(NOW)  # 消费 verify

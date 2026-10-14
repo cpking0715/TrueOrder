@@ -172,3 +172,48 @@ class TestWorker分发:
         assert len(running) == 1
         assert len(pending) == 1
         assert isinstance(pending[0], Job)
+
+
+class Test逐个认领与优雅停止:
+    def test_每次只认领一个_其余保持pending(self, queue):
+        from app.infrastructure.jobs import Worker
+
+        seen_running: list[int] = []
+
+        def handler(session, payload):
+            seen_running.append(len(queue.list_jobs(status="running")))
+
+        for _ in range(3):
+            queue.enqueue("find_contacts", {})
+        Worker(queue, {"find_contacts": handler}).run_once(NOW)
+        assert seen_running == [1, 1, 1]  # 执行期间只有当前任务是 running
+        assert len(queue.list_jobs(status="done")) == 3
+
+    def test_should_stop在任务之间停下(self, queue):
+        from app.infrastructure.jobs import Worker
+
+        calls: list[int] = []
+        for _ in range(3):
+            queue.enqueue("find_contacts", {})
+        Worker(queue, {"find_contacts": lambda s, p: calls.append(1)}).run_once(
+            NOW, should_stop=lambda: len(calls) >= 1
+        )
+        assert len(calls) == 1
+        assert len(queue.list_jobs(status="pending")) == 2
+
+    def test_recover_dead只回收超时的running(self, queue):
+        from datetime import timedelta
+
+        from app.domain.jobs import DEAD_TASK_TIMEOUT
+
+        a = queue.enqueue("find_contacts", {})
+        b = queue.enqueue("find_contacts", {})
+        queue.claim(NOW, limit=2)
+        # a 早已僵死，b 刚认领
+        from app.infrastructure.orm import JobORM
+
+        queue.session.get(JobORM, a).locked_at = NOW - DEAD_TASK_TIMEOUT - timedelta(minutes=1)
+        queue.session.commit()
+        assert queue.recover_dead(NOW) == 1
+        status = {j.id: j.status for j in queue.list_jobs()}
+        assert status[a] == "pending" and status[b] == "running"
