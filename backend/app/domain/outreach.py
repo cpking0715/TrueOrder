@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 
 # 模板支持的变量（渲染时缺失则报错，不输出空串）
 TEMPLATE_VARIABLES = frozenset({
@@ -88,6 +89,31 @@ def missing_sender_config(company_address: str, reply_to: str) -> list[str]:
     return missing
 
 
+class SendRejection(StrEnum):
+    """拒发原因（结构化，调用方按枚举分支，不再匹配中文文案）。"""
+
+    SENDER_CONFIG_MISSING = "sender_config_missing"  # 缺公司地址/退订回复地址
+    DO_NOT_CONTACT = "do_not_contact"
+    INVALID_EMAIL = "invalid_email"  # 验证状态 invalid / bounced
+    NO_SOURCE = "no_source"  # 缺来源记录（AGENTS 硬约束：只发有来源记录的联系人）
+    SUPPRESSED = "suppressed"
+    COOLDOWN = "cooldown"
+    QUOTA = "quota"  # 今日额度用尽：可延期重试，不是失败
+
+
+@dataclass(frozen=True)
+class GuardRejection:
+    reason: SendRejection
+    message: str  # 面向用户的说明（只用于展示，不参与逻辑判断）
+
+
+def has_source_record(source: str, source_ref: str) -> bool:
+    """来源可追溯：source 必填；非手工录入还须有 source_ref（接口名/页面 URL/文件名）。"""
+    if not (source or "").strip():
+        return False
+    return source == "manual" or bool((source_ref or "").strip())
+
+
 def check_send_guards(
     *,
     company_address: str,
@@ -95,30 +121,40 @@ def check_send_guards(
     email: str,
     do_not_contact: bool,
     verify_status: str,
+    source: str,
+    source_ref: str,
     suppressions: list[dict],
     recent_sends: list[datetime],
     sent_today: int,
     daily_cap: int = 30,
     cooldown_days: int = 3,
-) -> str | None:
-    """全量护栏检查；返回 None=可发，否则返回拒绝原因（状态码用）。
+) -> GuardRejection | None:
+    """全量护栏检查；None = 可发，否则返回结构化拒发原因。
 
     发件配置（公司地址、退订回复地址）缺失时一律拒绝：DEV-SPEC 3.5 每封信必须带
     物理地址与可用的退订途径，不允许用占位地址兜底。
     """
     missing = missing_sender_config(company_address, reply_to)
     if missing:
-        return f"发件配置缺失，拒绝发送：{'、'.join(missing)}"
+        return GuardRejection(
+            SendRejection.SENDER_CONFIG_MISSING, f"发件配置缺失，拒绝发送：{'、'.join(missing)}"
+        )
     if do_not_contact:
-        return "联系人已标记不再联系"
+        return GuardRejection(SendRejection.DO_NOT_CONTACT, "联系人已标记不再联系")
     if verify_status in ("invalid", "bounced"):
-        return f"邮箱验证状态为 {verify_status}，不发送"
+        return GuardRejection(
+            SendRejection.INVALID_EMAIL, f"邮箱验证状态为 {verify_status}，不发送"
+        )
+    if not has_source_record(source, source_ref):
+        return GuardRejection(
+            SendRejection.NO_SOURCE, "联系人缺少来源记录（source/source_ref），不发送"
+        )
     if is_suppressed(email, suppressions):
-        return "命中抑制名单"
+        return GuardRejection(SendRejection.SUPPRESSED, "命中抑制名单")
     if is_in_cooldown(email, recent_sends, cooldown_days):
-        return f"冷却中（{cooldown_days} 天内已发过）"
+        return GuardRejection(SendRejection.COOLDOWN, f"冷却中（{cooldown_days} 天内已发过）")
     if daily_remaining(sent_today, daily_cap) <= 0:
-        return f"今日发送额度已用完（上限 {daily_cap}）"
+        return GuardRejection(SendRejection.QUOTA, f"今日发送额度已用完（上限 {daily_cap}）")
     return None
 
 
