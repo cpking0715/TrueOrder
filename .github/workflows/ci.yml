@@ -36,6 +36,8 @@ jobs:
       - run: uv run pytest -q
       - run: uv run pytest -q -m smoke
       - run: uv run alembic upgrade head
+        env:
+          TRUEORDER_DATABASE_URL: postgresql+psycopg://trueorder:trueorder@localhost:5433/trueorder
       - run: uv run alembic check
         env:
           TRUEORDER_DATABASE_URL: postgresql+psycopg://trueorder:trueorder@localhost:5433/trueorder
