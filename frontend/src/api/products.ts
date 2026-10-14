@@ -1,6 +1,7 @@
 /** 产品域 API：类型来自后端 OpenAPI 生成（pnpm gen:api），不手写接口类型。 */
 
 import { requestJson, uploadJson, withApiToken } from "./client";
+import { waitForJob, type ImportJob, type WaitOptions } from "./jobs";
 import type { components } from "./schema";
 
 export type Meta = components["schemas"]["MetaOut"];
@@ -9,7 +10,18 @@ export type ProductCreate = components["schemas"]["ProductCreateIn"];
 export type Buyer = components["schemas"]["BuyerOut"];
 export type BuyerList = components["schemas"]["BuyerListOut"];
 export type CompanyDetail = components["schemas"]["CompanyDetailOut"];
-export type ImportSummary = components["schemas"]["ImportSummaryOut"];
+/** CSV 导入结果（后台 import_csv 任务的 jobs.result，形状与后端 ImportSummaryOut 一致）。 */
+export interface ImportSummary {
+  inserted_bills?: number;
+  duplicate_bills?: number;
+  suspect_hs_bills?: number;
+  invalid_rows?: string[];
+  companies_created?: number;
+  companies_updated?: number;
+  products_upserted?: number;
+  hs_assignments_written?: number;
+  rescore?: { product_code: string; precise: number; [key: string]: unknown }[];
+}
 
 export type Tier = "potential" | "precise" | "excluded";
 export type Order = "shipments" | "last_arrival" | "name";
@@ -78,12 +90,15 @@ export async function fetchCompany(
   return requestJson<CompanyDetail>(`/api/companies/${companyId}${search}`);
 }
 
-export async function uploadProductsCsv(file: File): Promise<ImportSummary> {
-  return uploadJson<ImportSummary>("/api/products/import", file);
+// 导入走后台任务：上传返回 job_id，随后轮询任务结果
+export async function uploadProductsCsv(file: File, wait?: WaitOptions): Promise<ImportSummary> {
+  const job = await uploadJson<ImportJob>("/api/products/import", file);
+  return waitForJob<ImportSummary>(job.job_id, wait);
 }
 
-export async function uploadBillsCsv(file: File, asOf?: string): Promise<ImportSummary> {
-  return uploadJson<ImportSummary>("/api/bills/import", file, asOf ? { as_of: asOf } : undefined);
+export async function uploadBillsCsv(file: File, asOf?: string, wait?: WaitOptions): Promise<ImportSummary> {
+  const job = await uploadJson<ImportJob>("/api/bills/import", file, asOf ? { as_of: asOf } : undefined);
+  return waitForJob<ImportSummary>(job.job_id, wait);
 }
 
 // AI 买家发现：从品名自动生成进口商名单（不依赖提单数据）

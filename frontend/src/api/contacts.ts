@@ -1,6 +1,7 @@
 /** 联系人域 API（WP1）：类型来自 OpenAPI 生成，不手写接口类型。 */
 
 import { requestJson, uploadJson, withApiToken } from "./client";
+import { waitForJob, type ImportJob, type WaitOptions } from "./jobs";
 import { buildBuyersParams, type BuyerQuery } from "./products";
 import type { components } from "./schema";
 
@@ -8,7 +9,13 @@ export type Contact = components["schemas"]["ContactOut"];
 export type ContactCreate = components["schemas"]["ContactCreateIn"];
 export type ContactUpdate = components["schemas"]["ContactUpdateIn"];
 export type CompanyWebsite = components["schemas"]["CompanyWebsiteOut"];
-export type ContactsImportSummary = components["schemas"]["ContactsImportOut"];
+/** 联系人 CSV 导入结果（后台 import_csv 任务的 jobs.result）。 */
+export interface ContactsImportSummary {
+  added: number;
+  duplicates: number;
+  company_not_found: string[];
+  invalid_rows: string[];
+}
 
 export async function fetchContacts(companyId: number): Promise<Contact[]> {
   return requestJson<Contact[]>(`/api/companies/${companyId}/contacts`);
@@ -45,8 +52,9 @@ export async function patchCompanyWebsite(
   });
 }
 
-export async function uploadContactsCsv(file: File): Promise<ContactsImportSummary> {
-  return uploadJson<ContactsImportSummary>("/api/contacts/import", file);
+export async function uploadContactsCsv(file: File, wait?: WaitOptions): Promise<ContactsImportSummary> {
+  const job = await uploadJson<ImportJob>("/api/contacts/import", file);
+  return waitForJob<ContactsImportSummary>(job.job_id, wait);
 }
 
 // 与买家列表同一组筛选导出联系人（默认排除不再联系与无效邮箱）

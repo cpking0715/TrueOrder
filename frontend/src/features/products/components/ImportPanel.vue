@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { uploadBillsCsv, uploadProductsCsv, type ImportSummary } from "@/api/products";
+import { JobStillRunningError } from "@/api/jobs";
 import { useRouter } from "vue-router";
 
 const emit = defineEmits<{ imported: [] }>();
@@ -20,6 +21,12 @@ function describe(summary: ImportSummary): string {
   return `导入完成：${parts.join("，") || "无变化"}${rescored ? `；${rescored}` : ""}`;
 }
 
+function failMessage(error: unknown): string {
+  // 超时不是失败：任务仍在后台跑，去任务页看结果
+  if (error instanceof JobStillRunningError) return error.message;
+  return `导入失败：${(error as Error).message}`;
+}
+
 async function onProductsFile(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0];
   if (!file) return;
@@ -28,7 +35,7 @@ async function onProductsFile(event: Event) {
     message.value = describe(await uploadProductsCsv(file));
     emit("imported");
   } catch (error) {
-    message.value = `导入失败：${(error as Error).message}`;
+    message.value = failMessage(error);
   } finally {
     busy.value = false;
     (event.target as HTMLInputElement).value = "";
@@ -44,7 +51,7 @@ async function onBillsFile(event: Event) {
     emit("imported");
     router.go(0);
   } catch (error) {
-    message.value = `导入失败：${(error as Error).message}`;
+    message.value = failMessage(error);
   } finally {
     busy.value = false;
     (event.target as HTMLInputElement).value = "";
@@ -94,7 +101,7 @@ async function onBillsFile(event: Event) {
       v-if="busy"
       class="muted"
       style="margin-left: 10px"
-    >处理中…</span>
+    >后台导入中…（大文件可到「任务」页查看进度）</span>
     <p
       v-if="message"
       data-testid="import-message"
