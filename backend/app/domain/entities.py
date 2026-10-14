@@ -47,6 +47,18 @@ class BillEvidence:
 
 
 @dataclass(frozen=True)
+class LeadSource:
+    """非提单来源的产品线索（如 AI 买家发现、手动加入跟进）。
+
+    kind：ai_discover | opportunity；label：给人看的来源说明；ref：可追溯标识（任务 id 等）。
+    """
+
+    kind: str
+    label: str
+    ref: str = ""
+
+
+@dataclass(frozen=True)
 class CompanyFacts:
     """一家企业（规范化名称 + 国家识别）在某产品上下文里的全部事实。"""
 
@@ -56,6 +68,8 @@ class CompanyFacts:
     address: str
     country: str
     bills: tuple[BillEvidence, ...] = ()
+    # 该企业在当前产品上的非提单来源线索（无合格提单时据此入潜在层，永不升精准）
+    lead_sources: tuple[LeadSource, ...] = ()
 
 
 @dataclass(frozen=True)
