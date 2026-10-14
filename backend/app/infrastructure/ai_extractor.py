@@ -8,9 +8,12 @@ from __future__ import annotations
 
 from app.domain.ai_extract import build_extract_messages, parse_extract_response
 from app.domain.entities import FoundContact
+from app.infrastructure.llm_client import LlmClient
 
 
 class DeepSeekExtractor:
+    """fetch(url, payload) -> dict 可注入（测试用）；默认走统一 LlmClient。"""
+
     def __init__(
         self,
         api_key: str,
@@ -19,38 +22,28 @@ class DeepSeekExtractor:
         timeout: float = 30.0,
         fetch=None,
     ) -> None:
-        self._api_key = api_key
+        self._fetch = fetch
         self._model = model
         self._base_url = base_url.rstrip("/")
-        self._timeout = timeout
-        self._fetch = fetch or self._http_post
+        self._client = LlmClient(api_key=api_key, model=model, base_url=base_url, timeout=timeout)
         self.calls = 0  # 单实例调用计数（审计用）
 
     def extract(self, page_text: str, url: str) -> list[FoundContact]:
-        payload = {
-            "model": self._model,
-            "messages": build_extract_messages(page_text, url),
-            "temperature": 0,
-            "max_tokens": 2000,
-            # 推理模型思维链会吃光 max_tokens 致 content 为空，结构化提取无需推理
-            "thinking": {"type": "disabled"},
-        }
-        data = self._fetch(f"{self._base_url}/chat/completions", payload)
+        messages = build_extract_messages(page_text, url)
+        if self._fetch is not None:
+            payload = {
+                "model": self._model,
+                "messages": messages,
+                "temperature": 0,
+                "max_tokens": 2000,
+                "thinking": {"type": "disabled"},
+            }
+            data = self._fetch(f"{self._base_url}/chat/completions", payload)
+            content = (data or {}).get("choices", [{}])[0].get("message", {}).get("content")
+        else:
+            content = self._client.chat(messages, temperature=0, max_tokens=2000)
         self.calls += 1
-        content = (data or {}).get("choices", [{}])[0].get("message", {}).get("content")
         return parse_extract_response(content)
-
-    def _http_post(self, url: str, payload: dict) -> dict:
-        import httpx
-
-        response = httpx.post(
-            url,
-            json=payload,
-            headers={"Authorization": f"Bearer {self._api_key}"},
-            timeout=self._timeout,
-        )
-        response.raise_for_status()
-        return response.json()
 
 
 def make_ai_extractor(settings) -> DeepSeekExtractor | None:

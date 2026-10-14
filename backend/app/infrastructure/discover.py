@@ -6,16 +6,19 @@
 
 from __future__ import annotations
 
-import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
+from app.core.logging import get_logger
 from app.domain.discover import parse_discover_response
 from app.domain.entities import DiscoveredBuyer
 from app.domain.normalize import normalize_company_name, normalize_country
 from app.infrastructure.jobs import SqlJobQueue
+from app.infrastructure.llm_client import AiQuota, LlmClient
 from app.infrastructure.orm import CompanyORM
+
+log = get_logger("app.discover")
 
 # 五个搜索角度：每个生成 ~20 家，合并去重后 50-100 家
 DISCOVER_ANGLES = [
@@ -45,34 +48,31 @@ def _call_one_angle(
     angle: str, category: str, hs_code: str, settings: Settings
 ) -> list[DiscoveredBuyer]:
     prompt = _ANGLE_PROMPT.format(angle=angle, category=category, hs_code=hs_code)
-    response = httpx.post(
-        f"{settings.ai_base_url.rstrip('/')}/chat/completions",
-        json={
-            "model": settings.ai_model,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.4,
-            "max_tokens": 10000,
-        },
-        headers={"Authorization": f"Bearer {settings.ai_api_key}"},
-        timeout=90,
-    )
-    response.raise_for_status()
-    content = (
-        response.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+    content = LlmClient.from_settings(settings, timeout=90).chat(
+        [{"role": "user", "content": prompt}],
+        temperature=0.4,
+        max_tokens=10000,
+        disable_thinking=False,  # 名单生成保留推理（与原行为一致）
     )
     return parse_discover_response(content)
 
 
 def batch_discover(
-    category: str, hs_code: str, settings: Settings
+    category: str, hs_code: str, settings: Settings, quota: AiQuota | None = None
 ) -> list[DiscoveredBuyer]:
-    """五角度并行生成 + 按规范化名称去重。"""
+    """五角度逐个生成 + 按规范化名称去重；传 quota 时每角度计 1 次 AI 调用，额度用尽即停。"""
     all_buyers: list[DiscoveredBuyer] = []
     seen: set[str] = set()
     for angle in DISCOVER_ANGLES:
+        if quota is not None:
+            if quota.remaining() <= 0:
+                log.warning("AI 日额度用尽，买家发现提前结束", extra={"angle": angle})
+                break
+            quota.record("ai-discover")
         try:
             buyers = _call_one_angle(angle, category, hs_code, settings)
         except Exception:  # noqa: BLE001 - 单角度失败不影响其他
+            log.warning("买家发现单角度失败，跳过", extra={"angle": angle}, exc_info=True)
             continue
         for b in buyers:
             key = normalize_company_name(b.company_name)
@@ -97,7 +97,13 @@ def make_discover_buyers_handler(settings: Settings | None = None):
             raise PermanentJobError("未配置 AI Key，无法自动发现买家")
 
         hs_code = str(payload.get("hs_code") or "").strip()
-        buyers = batch_discover(category, hs_code, cfg)
+        quota = AiQuota(session, cfg.ai_daily_cap)
+        if quota.remaining() <= 0:
+            from app.core.timeutil import utc_day_bounds
+            from app.infrastructure.jobs import QuotaDeferred
+
+            raise QuotaDeferred(utc_day_bounds()[1], "今日 AI 调用额度已用尽")
+        buyers = batch_discover(category, hs_code, cfg, quota=quota)
 
         queue = SqlJobQueue(session)
         for buyer in buyers:

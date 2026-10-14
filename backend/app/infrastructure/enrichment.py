@@ -284,16 +284,9 @@ def make_crawl_website_handler(
         cfg = settings or get_settings()
         active_ai = ai_extractor
         if active_ai is None and cfg.ai_api_key:
-            ai_used = sum(
-                1 for r in session.scalars(
-                    select(EnrichmentCallORM).where(
-                        EnrichmentCallORM.provider == "ai-extract",
-                        EnrichmentCallORM.called_at >= utc_day_bounds()[0],
-                        EnrichmentCallORM.called_at < utc_day_bounds()[1],
-                    )
-                )
-            )
-            if ai_used < cfg.ai_daily_cap:
+            from app.infrastructure.llm_client import AiQuota
+
+            if AiQuota(session, cfg.ai_daily_cap).remaining() > 0:
                 from app.infrastructure.ai_extractor import make_ai_extractor
 
                 active_ai = make_ai_extractor(cfg)
