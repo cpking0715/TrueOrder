@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import ipaddress
+import logging
 import socket
 import time
 import urllib.robotparser
@@ -18,6 +19,8 @@ import httpx
 
 from app.domain.contacts import extract_emails, extract_named_contacts, select_crawl_pages
 from app.domain.entities import FoundContact
+
+logger = logging.getLogger(__name__)
 
 MAX_PAGES = 5
 PAGE_BYTE_CAP = 1024 * 1024
@@ -165,6 +168,7 @@ class WebsiteCrawler:
                                 )
                             )
                 except Exception:  # noqa: BLE001 - AI 是增强：任何失败跳过该页
+                    logger.debug("AI 抽取失败，跳过该页 %s", url, exc_info=True)
                     continue
         return result
 

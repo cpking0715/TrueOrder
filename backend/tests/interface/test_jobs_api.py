@@ -46,3 +46,17 @@ class Test任务状态:
             "id", "kind", "status", "payload", "attempts",
             "max_attempts", "run_after", "last_error", "created_at",
         } <= set(item.keys())
+
+
+class Test单任务查询:
+    def test_不存在返回404(self, client):
+        assert client.get("/api/jobs/999999").status_code == 404
+
+    def test_导入接口返回202与job_id(self, client):
+        r = client.post(
+            "/api/products/import",
+            files={"file": ("p.csv", "code,name,hs_code,buyer_type\n", "text/csv")},
+        )
+        assert r.status_code == 202, r.text
+        job = client.get(f"/api/jobs/{r.json()['job_id']}").json()
+        assert job["kind"] == "import_csv" and job["status"] == "pending"

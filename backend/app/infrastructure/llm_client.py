@@ -127,7 +127,8 @@ class AiQuota:
 
     def record(self, provider: str, company_id: int | None = None, ok: bool = True) -> None:
         """记一次 AI 外呼（只 add，不提交；由调用方事务提交）。"""
-        assert provider.startswith(AI_PROVIDER_PREFIX), provider
+        if not provider.startswith(AI_PROVIDER_PREFIX):
+            raise ValueError(f"AI 配额只记 {AI_PROVIDER_PREFIX}* 供应方：{provider}")
         self._session.add(
             EnrichmentCallORM(
                 provider=provider, company_id=company_id, credits_used=0, ok=ok

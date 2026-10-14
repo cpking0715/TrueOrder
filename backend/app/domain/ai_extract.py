@@ -20,7 +20,7 @@ _SYSTEM_PROMPT = (
 )
 
 
-def build_extract_messages(page_text: str, url: str) -> list[dict]:
+def build_extract_messages(page_text: str, url: str) -> list[dict[str, str]]:
     """构造 chat messages；页面文本截断防 token 失控。"""
     trimmed = (page_text or "")[:12000]
     return [

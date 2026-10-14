@@ -8,10 +8,10 @@ from dataclasses import dataclass
 
 
 class ReplyKind(enum.StrEnum):
-    REPLY = "reply"                # 正常回信（有意向或问题）
-    UNSUBSCRIBE = "unsubscribe"    # 退订请求
-    BOUNCE = "bounce"              # 退信（邮箱不可达）
-    AUTO_REPLY = "auto_reply"      # 自动回复（out of office 等）
+    REPLY = "reply"  # 正常回信（有意向或问题）
+    UNSUBSCRIBE = "unsubscribe"  # 退订请求
+    BOUNCE = "bounce"  # 退信（邮箱不可达）
+    AUTO_REPLY = "auto_reply"  # 自动回复（out of office 等）
 
 
 @dataclass(frozen=True)

@@ -124,7 +124,7 @@ export interface paths {
         put?: never;
         /**
          * Import Products Csv
-         * @description 产品目录 CSV 导入：每行一个产品 + 税号 + 买家类型，多行税号自动合并。
+         * @description 产品目录 CSV 导入（后台任务）：多行税号自动合并，导入后全量重打分。
          */
         post: operations["import_products_csv_api_products_import_post"];
         delete?: never;
@@ -164,7 +164,7 @@ export interface paths {
         put?: never;
         /**
          * Import Bills Csv
-         * @description 提单 CSV 导入：企业归并 + 去重 + 自动重打分。as_of 缺省用今天。
+         * @description 提单 CSV 导入（后台任务）：企业归并 + 去重 + 自动重打分。as_of 缺省用今天。
          */
         post: operations["import_bills_csv_api_bills_import_post"];
         delete?: never;
@@ -244,7 +244,7 @@ export interface paths {
         put?: never;
         /**
          * Import Contacts Csv
-         * @description 联系人 CSV 导入：company_id 或「企业名+国家」定位企业，name/title/email/phone。
+         * @description 联系人 CSV 导入（后台任务）：company_id 或「企业名+国家」定位企业。
          */
         post: operations["import_contacts_csv_api_contacts_import_post"];
         delete?: never;
@@ -285,6 +285,23 @@ export interface paths {
         };
         /** List Jobs */
         get: operations["list_jobs_api_jobs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Job */
+        get: operations["get_job_api_jobs__job_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -890,17 +907,6 @@ export interface components {
             /** Do Not Contact */
             do_not_contact?: boolean | null;
         };
-        /** ContactsImportOut */
-        ContactsImportOut: {
-            /** Added */
-            added: number;
-            /** Duplicates */
-            duplicates: number;
-            /** Company Not Found */
-            company_not_found: string[];
-            /** Invalid Rows */
-            invalid_rows: string[];
-        };
         /** EnrichConfirmIn */
         EnrichConfirmIn: {
             /** Tier */
@@ -1023,55 +1029,18 @@ export interface components {
             /** Sample Description */
             sample_description: string;
         };
-        /** ImportSummaryOut */
-        ImportSummaryOut: {
+        /**
+         * ImportJobOut
+         * @description CSV 导入已入队：前端按 job_id 轮询 /api/jobs/{job_id}，完成后读 result。
+         */
+        ImportJobOut: {
+            /** Job Id */
+            job_id: number;
             /**
-             * Inserted Bills
-             * @default 0
+             * Status
+             * @default queued
              */
-            inserted_bills: number;
-            /**
-             * Duplicate Bills
-             * @default 0
-             */
-            duplicate_bills: number;
-            /**
-             * Suspect Hs Bills
-             * @default 0
-             */
-            suspect_hs_bills: number;
-            /**
-             * Invalid Rows
-             * @default []
-             */
-            invalid_rows: string[];
-            /**
-             * Companies Created
-             * @default 0
-             */
-            companies_created: number;
-            /**
-             * Companies Updated
-             * @default 0
-             */
-            companies_updated: number;
-            /**
-             * Products Upserted
-             * @default 0
-             */
-            products_upserted: number;
-            /**
-             * Hs Assignments Written
-             * @default 0
-             */
-            hs_assignments_written: number;
-            /**
-             * Rescore
-             * @default []
-             */
-            rescore: {
-                [key: string]: unknown;
-            }[];
+            status: string;
         };
         /** JobCreatedOut */
         JobCreatedOut: {
@@ -1105,6 +1074,10 @@ export interface components {
             last_error?: string | null;
             /** Created At */
             created_at?: string | null;
+            /** Result */
+            result?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** JobsListOut */
         JobsListOut: {
@@ -1566,12 +1539,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImportSummaryOut"];
+                    "application/json": components["schemas"]["ImportJobOut"];
                 };
             };
             /** @description Validation Error */
@@ -1630,12 +1603,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImportSummaryOut"];
+                    "application/json": components["schemas"]["ImportJobOut"];
                 };
             };
             /** @description Validation Error */
@@ -1862,12 +1835,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ContactsImportOut"];
+                    "application/json": components["schemas"]["ImportJobOut"];
                 };
             };
             /** @description Validation Error */
@@ -1938,6 +1911,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobsListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_job_api_jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobOut"];
                 };
             };
             /** @description Validation Error */

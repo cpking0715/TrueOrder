@@ -10,7 +10,12 @@ Intent = Literal["cold", "warm", "hot"]
 
 # 有序阶段：前进 = 沿此序列向前跳（允许跳级）；lost 为独立终态
 STAGES: tuple[str, ...] = (
-    "lead", "contacted", "replied", "sample_quote", "negotiating", "won_intent",
+    "lead",
+    "contacted",
+    "replied",
+    "sample_quote",
+    "negotiating",
+    "won_intent",
 )
 TERMINAL_STAGES = ("won_intent", "lost")
 

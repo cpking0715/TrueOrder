@@ -40,13 +40,15 @@ target-version = "py313"
 extend-exclude = ["alembic/versions"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "ASYNC"]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "S"]
 
 [tool.ruff.lint.per-file-ignores]
 # FastAPI 依赖注入的标准写法是 Depends(...) 作为参数默认值
 "app/interface/**" = ["B008"]
 # 内嵌 CSV fixture 的行宽由数据决定，不做代码折行
 "tests/infra/test_importer.py" = ["E501"]
+# 测试里 assert 是断言本身；测试令牌与造数随机数不涉及安全
+"tests/**" = ["S101", "S105", "S106", "S311"]
 "tests/infra/test_queries.py" = ["E501"]
 "tests/interface/test_api.py" = ["E501"]
 
@@ -58,11 +60,7 @@ packages = ["app"]
 # 先对 domain 开严格；其余层逐步收紧（见 PR 说明）
 [[tool.mypy.overrides]]
 module = "app.domain.*"
-disallow_untyped_defs = true
-warn_return_any = true
-no_implicit_optional = true
-# 本 PR 先把门禁立起来；下列码在后续 PR 收紧（见 PR 正文剩余工作）
-disable_error_code = ["type-arg", "no-any-return", "arg-type", "unused-ignore", "no-untyped-def"]
+strict = true
 
 
 [[tool.mypy.overrides]]

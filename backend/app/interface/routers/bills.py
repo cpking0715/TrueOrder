@@ -5,27 +5,31 @@ from __future__ import annotations
 from datetime import date
 
 from fastapi import APIRouter, Depends, Form, HTTPException
+from sqlalchemy.orm import Session
 
-from app.infrastructure.importers import CsvImporter
+from app.infrastructure.import_jobs import enqueue_import
 from app.infrastructure.queries import SqlBuyerQueries
-from app.interface.deps import CsvUpload, get_buyer_queries, get_importer, read_csv_upload
+from app.interface.deps import (
+    CsvUpload,
+    get_buyer_queries,
+    get_session,
+    read_csv_upload,
+)
 from app.interface.mapping import company_detail_to_out
-from app.interface.schemas import CompanyDetailOut, ImportSummaryOut
+from app.interface.schemas import CompanyDetailOut, ImportJobOut
 
 router = APIRouter(prefix="/api", tags=["bills", "companies"])
 
 
-@router.post("/bills/import", response_model=ImportSummaryOut)
+@router.post("/bills/import", response_model=ImportJobOut, status_code=202)
 def import_bills_csv(
     upload: CsvUpload = Depends(read_csv_upload),
     as_of: date | None = Form(default=None),
-    importer: CsvImporter = Depends(get_importer),
+    session: Session = Depends(get_session),
 ):
-    """提单 CSV 导入：企业归并 + 去重 + 自动重打分。as_of 缺省用今天。"""
-    summary, rescores = importer.import_bills(
-        upload.text, source_ref=upload.filename, as_of=as_of
-    )
-    return ImportSummaryOut(**summary.__dict__, rescore=[r.__dict__ for r in rescores])
+    """提单 CSV 导入（后台任务）：企业归并 + 去重 + 自动重打分。as_of 缺省用今天。"""
+    job_id = enqueue_import(session, "bills", upload.filename, upload.text, as_of=as_of)
+    return ImportJobOut(job_id=job_id)
 
 
 @router.get("/companies/{company_id}", response_model=CompanyDetailOut)

@@ -8,14 +8,17 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from collections.abc import Iterable
 from datetime import date
 
 from app.domain.entities import (
     Audience,
+    BillEvidence,
     CompanyFacts,
     ProductConfig,
     ScoreReason,
     ScoreResult,
+    Tier,
 )
 from app.domain.normalize import (
     hs_family_prefix,
@@ -31,9 +34,22 @@ BANK_TOKENS = {"BANK", "BANCO", "BANQUE"}
 # 单词级强特征。已移除 CARGO（服装品牌常用词，误伤面大）；保留 LOGISTICS/FREIGHT——
 # 提单收货人语境下含这两个词的多为 3PL/货代，收益大于误伤（词表可用真实授权数据校准）。
 FORWARDER_TOKENS = {
-    "FORWARDER", "FORWARDING", "FREIGHT", "NVOCC", "3PL",
-    "EXPEDITORS", "KUEHNE", "NAGEL", "SCHENKER", "PANALPINA", "DSV", "CEVA",
-    "GEODIS", "YUSEN", "KINTETSU", "LOGISTICS",
+    "FORWARDER",
+    "FORWARDING",
+    "FREIGHT",
+    "NVOCC",
+    "3PL",
+    "EXPEDITORS",
+    "KUEHNE",
+    "NAGEL",
+    "SCHENKER",
+    "PANALPINA",
+    "DSV",
+    "CEVA",
+    "GEODIS",
+    "YUSEN",
+    "KINTETSU",
+    "LOGISTICS",
 }
 # 集团内部供货判定时，从名称两端剥离的地理词。
 GEO_TOKENS = {"USA", "US", "AMERICA", "CN", "CHINA", "VN", "VIETNAM", "HK", "HONGKONG", "OVERSEAS"}
@@ -77,7 +93,7 @@ def _matched_keywords(business_text: str, keywords: tuple[str, ...]) -> tuple[st
     return tuple(k for k in keywords if _squash(k) and _squash(k) in text)
 
 
-def _bill_ids(bills) -> tuple[int, ...]:
+def _bill_ids(bills: Iterable[BillEvidence]) -> tuple[int, ...]:
     return tuple(b.bill_id for b in bills)
 
 
@@ -117,8 +133,12 @@ def score_company(
     all_bill_ids = _bill_ids(facts.bills)
     if not real_variants:
         return _excluded(
-            product, facts, audience, "EX_BLANK_CONSIGNEE",
-            "收货人为空抬头（TO THE ORDER OF），无真实公司名", all_bill_ids,
+            product,
+            facts,
+            audience,
+            "EX_BLANK_CONSIGNEE",
+            "收货人为空抬头（TO THE ORDER OF），无真实公司名",
+            all_bill_ids,
         )
 
     business_text = _squash(" ".join(real_variants) + " " + facts.address)
@@ -127,13 +147,21 @@ def score_company(
 
     if name_tokens & BANK_TOKENS:
         return _excluded(
-            product, facts, audience, "EX_BANK",
-            "收货人抬头为银行（可能仅作信用证抬头）", all_bill_ids,
+            product,
+            facts,
+            audience,
+            "EX_BANK",
+            "收货人抬头为银行（可能仅作信用证抬头）",
+            all_bill_ids,
         )
     if text_tokens & FORWARDER_TOKENS:
         return _excluded(
-            product, facts, audience, "EX_FORWARDER",
-            "收货人名称/地址含货代特征词", all_bill_ids,
+            product,
+            facts,
+            audience,
+            "EX_FORWARDER",
+            "收货人名称/地址含货代特征词",
+            all_bill_ids,
         )
 
     family_prefixes = {hs_family_prefix(c) for c in codes_for_audience}
@@ -148,12 +176,13 @@ def score_company(
         and b.arrival_date >= months_before(as_of, 24)
     ]
     if not qualifying:
-        suspect_family = [
-            b for b in in_family if b.hs_suspect or not is_valid_hs(b.hs_code)
-        ]
+        suspect_family = [b for b in in_family if b.hs_suspect or not is_valid_hs(b.hs_code)]
         if suspect_family:
             return _excluded(
-                product, facts, audience, "EX_HS_INVALID",
+                product,
+                facts,
+                audience,
+                "EX_HS_INVALID",
                 f"该收货人有 {len(suspect_family)} 票税号明显误码，无法确认税号归属",
                 _bill_ids(suspect_family),
             )
@@ -168,7 +197,10 @@ def score_company(
     )
     if peer_hits and not real_buyer_hits:
         return _excluded(
-            product, facts, audience, "EX_PEER_OVERSEAS",
+            product,
+            facts,
+            audience,
+            "EX_PEER_OVERSEAS",
             f"公司业务命中同行行业词（{'、'.join(peer_hits)}），疑似同行海外公司",
             all_bill_ids,
         )
@@ -179,7 +211,10 @@ def score_company(
     independent = [b for b in qualifying if b not in related]
     if not independent:
         return _excluded(
-            product, facts, audience, "EX_RELATED_PARTY",
+            product,
+            facts,
+            audience,
+            "EX_RELATED_PARTY",
             "该税号下的票全部为集团内部供货（供货方与收货人同名/关联）",
             _bill_ids(qualifying),
         )
@@ -213,7 +248,7 @@ def score_company(
         )
 
     shipper_counts = Counter(b.shipper_normalized for b in recent_12m)
-    top_shipper, top_count = (shipper_counts.most_common(1)[0] if shipper_counts else ("", 0))
+    top_shipper, top_count = shipper_counts.most_common(1)[0] if shipper_counts else ("", 0)
     supplier_ok = top_count >= 2
     if supplier_ok:
         supplier_bills = [b for b in recent_12m if b.shipper_normalized == top_shipper]
@@ -242,6 +277,7 @@ def score_company(
         )
 
     precise = repeat_ok and supplier_ok and business_ok
+    tier: Tier
     if precise:
         tier = "precise"
     else:

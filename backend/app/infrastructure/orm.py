@@ -215,7 +215,7 @@ class JobORM(Base):
         ),
         CheckConstraint(
             "kind IN ('send_email','find_contacts','crawl_website'"
-            ",'poll_imap','verify_email','discover_buyers')",
+            ",'poll_imap','verify_email','discover_buyers','import_csv')",
             name="ck_jobs_kind",
         ),
         # 认领路径只扫待跑任务
@@ -236,7 +236,22 @@ class JobORM(Base):
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     max_attempts: Mapped[int] = mapped_column(Integer, default=3)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 处理器返回的结果摘要（如 CSV 导入统计），供界面轮询展示
+    result: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class JobUploadORM(Base):
+    """后台导入任务的上传暂存（CSV 原文不进 jobs.payload，避免任务列表载入大字段）。"""
+
+    __tablename__ = "job_uploads"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    filename: Mapped[str] = mapped_column(String(255))
+    content: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

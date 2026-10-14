@@ -18,16 +18,20 @@
 
 ## 快速开始
 
-### 0. Docker Compose（可选）
+### 0. Docker Compose（生产式部署）
 
 ```bash
-cp .env.example .env   # 至少填 TRUEORDER_API_TOKEN；发信再填 COMPANY_ADDRESS / SMTP_*
-docker compose up --build
-# API http://localhost:8000  ；worker 同栈；Ctrl-C 后 worker 会优雅停
+cp .env.example .env   # 必填 POSTGRES_PASSWORD 与 TRUEORDER_API_TOKEN（缺失 compose 直接报错）；发信再填 COMPANY_ADDRESS / SMTP_*
+docker compose up -d --build
+# 启动顺序：db 健康 → migrate（只跑 alembic，一次性）→ api + worker
+# API http://localhost:8000（GET /healthz 探活）；数据库只绑 127.0.0.1:5433
 ```
 
-生产/非样本：`TRUEORDER_SAMPLE_MODE=false` 时必须显式设置 `TRUEORDER_DATABASE_URL`（否则进程拒绝启动）。
-`bootstrap --drop` 仅在样本模式且库地址像本机时可用。
+- 镜像以非 root 用户（uid 10001）运行；db/api/worker 均 `restart: unless-stopped` 并带健康检查
+  （api 查 `/healthz` 含数据库连通；worker 查心跳文件 `TRUEORDER_WORKER_HEARTBEAT`，5 分钟未刷新判不健康）。
+- compose 固定 `TRUEORDER_SAMPLE_MODE=false`：只迁移、**不导入示例数据**；无默认口令。
+- 非样本模式必须显式设置 `TRUEORDER_DATABASE_URL`（否则进程拒绝启动）；`bootstrap --drop` 仅在样本模式且库主机为 localhost/127.0.0.1 时可用。
+- CSV 导入（产品/提单/联系人）走后台 `import_csv` 任务，**必须有 worker 在跑**才会完成；界面会轮询结果，超时可到「任务」页查看。
 
 ### 1. 数据库（一次性）
 

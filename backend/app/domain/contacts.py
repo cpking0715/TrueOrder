@@ -9,9 +9,24 @@ from dataclasses import dataclass
 # 无人名的公共收件箱前缀：命中即 is_generic，不与具名联系人混用
 GENERIC_LOCAL_PARTS = frozenset(
     {
-        "info", "sales", "contact", "contacts", "hello", "support", "admin",
-        "inquiry", "enquiry", "office", "mail", "team", "service", "marketing",
-        "customerservice", "customerservices", "reception", "frontdesk",
+        "info",
+        "sales",
+        "contact",
+        "contacts",
+        "hello",
+        "support",
+        "admin",
+        "inquiry",
+        "enquiry",
+        "office",
+        "mail",
+        "team",
+        "service",
+        "marketing",
+        "customerservice",
+        "customerservices",
+        "reception",
+        "frontdesk",
     }
 )
 
@@ -29,16 +44,43 @@ _NAMED_PATTERNS = (
 )
 # 名字前常被吞进来的礼貌词/动词，从姓名头部剥掉
 _NAME_LEADING_NOISE = (
-    "contact", "email", "mail", "reach", "ask", "call", "write", "please",
-    "mr", "mrs", "ms", "dr", "and", "or", "the", "our", "to", "at", "for",
+    "contact",
+    "email",
+    "mail",
+    "reach",
+    "ask",
+    "call",
+    "write",
+    "please",
+    "mr",
+    "mrs",
+    "ms",
+    "dr",
+    "and",
+    "or",
+    "the",
+    "our",
+    "to",
+    "at",
+    "for",
 )
-_SCRIPT_STYLE_RE = re.compile(
-    r"<(script|style)\b[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL
-)
+_SCRIPT_STYLE_RE = re.compile(r"<(script|style)\b[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL)
 # 职位线索：出现在邮箱前 60 字内的这些词，取含词的短语作 title
 _TITLE_TOKENS = (
-    "sales", "purchas", "procure", "buy", "sourcing", "marketing", "export",
-    "manager", "director", "ceo", "owner", "founder", "contact", "head",
+    "sales",
+    "purchas",
+    "procure",
+    "buy",
+    "sourcing",
+    "marketing",
+    "export",
+    "manager",
+    "director",
+    "ceo",
+    "owner",
+    "founder",
+    "contact",
+    "head",
 )
 
 
@@ -63,7 +105,7 @@ def extract_named_contacts(text: str) -> list[tuple[str, str, str]]:
             if email.lower() in seen:
                 continue
             seen.add(email.lower())
-            window = cleaned[max(0, match.start() - 60):match.start()].lower()
+            window = cleaned[max(0, match.start() - 60) : match.start()].lower()
             title = ""
             for token in _TITLE_TOKENS:
                 idx = window.rfind(token)

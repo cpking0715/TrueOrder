@@ -22,7 +22,8 @@ from app.domain.jobs import (
 )
 from app.infrastructure.orm import JobORM
 
-Handler = Callable[[Session, dict[str, Any]], None]
+# 处理器可返回结果摘要 dict（写入 jobs.result），无结果返回 None
+Handler = Callable[[Session, dict[str, Any]], dict[str, Any] | None]
 
 log = get_logger("app.worker")
 
@@ -39,6 +40,7 @@ def _to_job(row: JobORM) -> Job:
         last_error=row.last_error,
         locked_at=row.locked_at,
         created_at=row.created_at,
+        result=row.result,
     )
 
 
@@ -84,9 +86,11 @@ class SqlJobQueue:
         self._session.commit()
         return [_to_job(r) for r in rows]
 
-    def complete(self, job_id: int) -> None:
+    def complete(self, job_id: int, result: dict[str, Any] | None = None) -> None:
         self._session.execute(
-            update(JobORM).where(JobORM.id == job_id).values(status="done", last_error=None)
+            update(JobORM)
+            .where(JobORM.id == job_id)
+            .values(status="done", last_error=None, result=result)
         )
         self._session.commit()
 
@@ -159,6 +163,10 @@ class SqlJobQueue:
         self._session.commit()
         return len(rows)
 
+    def get(self, job_id: int) -> Job | None:
+        row = self._session.get(JobORM, job_id)
+        return _to_job(row) if row else None
+
     def list_jobs(self, status: str | None = None, limit: int = 100) -> list[Job]:
         stmt = select(JobORM).order_by(JobORM.id.desc()).limit(limit)
         if status:
@@ -213,8 +221,8 @@ class Worker:
                 self._queue.fail_permanent(job.id, f"unknown job kind: {job.kind}")
                 return False
             try:
-                handler(self._queue.session, job.payload)
-                self._queue.complete(job.id)
+                result = handler(self._queue.session, job.payload)
+                self._queue.complete(job.id, result if isinstance(result, dict) else None)
                 log.info("job done", extra={"kind": job.kind})
                 return True
             except QuotaDeferred as exc:

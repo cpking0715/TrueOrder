@@ -6,12 +6,20 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from typing import Any
 
 # 模板支持的变量（渲染时缺失则报错，不输出空串）
-TEMPLATE_VARIABLES = frozenset({
-    "company", "contact_name", "product",
-    "last_arrival", "shipments", "supplier", "sender_name",
-})
+TEMPLATE_VARIABLES = frozenset(
+    {
+        "company",
+        "contact_name",
+        "product",
+        "last_arrival",
+        "shipments",
+        "supplier",
+        "sender_name",
+    }
+)
 
 _VAR_RE = re.compile(r"\{(\w+)\}")
 
@@ -48,7 +56,7 @@ def render_template(template: str, variables: dict[str, str]) -> str:
     return result
 
 
-def is_suppressed(email: str, suppressions: list[dict]) -> bool:
+def is_suppressed(email: str, suppressions: list[dict[str, Any]]) -> bool:
     """邮箱或域名命中任一抑制记录即 True。"""
     if not email:
         return True  # 无邮箱不发送
@@ -64,7 +72,9 @@ def is_suppressed(email: str, suppressions: list[dict]) -> bool:
 
 
 def is_in_cooldown(
-    email: str, recent_sends: list[datetime], cooldown_days: int = 3,
+    email: str,
+    recent_sends: list[datetime],
+    cooldown_days: int = 3,
 ) -> bool:
     """同一联系人 N 天内已发过信 → True（防重复触达）。"""
     if not email or not recent_sends:
@@ -123,7 +133,7 @@ def check_send_guards(
     verify_status: str,
     source: str,
     source_ref: str,
-    suppressions: list[dict],
+    suppressions: list[dict[str, Any]],
     recent_sends: list[datetime],
     sent_today: int,
     daily_cap: int = 30,

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app.infrastructure.orm import CompanyORM, ContactORM
+from tests.import_helper import post_import
 
 
 @pytest.fixture()
@@ -75,13 +76,13 @@ class Test批量补全:
         from pathlib import Path
 
         seed = Path(__file__).resolve().parents[2] / "app" / "seed"
-        client.post(
+        post_import(client,
             "/api/products/import",
             files={
                 "file": ("p.csv", (seed / "products.csv").read_text("utf-8-sig"), "text/csv")
             },
         )
-        client.post(
+        post_import(client,
             "/api/bills/import",
             files={
                 "file": (
@@ -154,11 +155,11 @@ class Test导出官网置信度:
         from app.interface.deps import get_session
 
         seed = Path(__file__).resolve().parents[2] / "app" / "seed"
-        client.post(
+        post_import(client,
             "/api/products/import",
             files={"file": ("p.csv", (seed / "products.csv").read_text("utf-8-sig"), "text/csv")},
         )
-        client.post(
+        post_import(client,
             "/api/bills/import",
             files={
                 "file": ("b.csv", (seed / "sample_bills.csv").read_text("utf-8-sig"), "text/csv")
