@@ -1,6 +1,6 @@
 /** 联系人域 API（WP1）：类型来自 OpenAPI 生成，不手写接口类型。 */
 
-import { ApiError, requestJson, uploadJson } from "./client";
+import { requestJson, uploadJson, withApiToken } from "./client";
 import { buildBuyersParams, type BuyerQuery } from "./products";
 import type { components } from "./schema";
 
@@ -31,11 +31,7 @@ export async function updateContact(contactId: number, payload: ContactUpdate): 
 }
 
 export async function deleteContact(contactId: number): Promise<void> {
-  // 204 无响应体，不能走 requestJson 的 json 解析
-  const response = await fetch(`/api/contacts/${contactId}`, { method: "DELETE" });
-  if (!response.ok) {
-    throw new ApiError(response.status, `${response.status} ${response.statusText}`);
-  }
+  await requestJson<void>(`/api/contacts/${contactId}`, { method: "DELETE" });
 }
 
 export async function patchCompanyWebsite(
@@ -56,7 +52,7 @@ export async function uploadContactsCsv(file: File): Promise<ContactsImportSumma
 // 与买家列表同一组筛选导出联系人（默认排除不再联系与无效邮箱）
 export function contactsExportUrl(productId: number, query: BuyerQuery): string {
   const search = new URLSearchParams(buildBuyersParams(query)).toString();
-  return `/api/products/${productId}/contacts/export.csv?${search}`;
+  return withApiToken(`/api/products/${productId}/contacts/export.csv?${search}`);
 }
 
 // ---------- WP4 补全与抓取 ----------

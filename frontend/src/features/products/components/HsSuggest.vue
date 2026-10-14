@@ -1,37 +1,25 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { suggestHs, type HsSuggestion } from "@/api/hs";
+import { useAsync } from "@/composables/useAsync";
 
 const props = defineProps<{ initialKeyword?: string }>();
 const emit = defineEmits<{ pick: [hsCode: string] }>();
 
 const open = ref(false);
 const keyword = ref(props.initialKeyword ?? "");
-const items = ref<Array<{ hs_code: string; shipments: number; sample_description: string }>>([]);
-const busy = ref(false);
-const error = ref("");
+const items = ref<HsSuggestion[]>([]);
+const { busy, error, run } = useAsync();
 
 async function search() {
   if (keyword.value.trim().length < 2) {
     error.value = "关键词至少 2 个字符";
     return;
   }
-  busy.value = true;
-  error.value = "";
-  try {
-    const response = await fetch(
-      `/api/hs/suggest?q=${encodeURIComponent(keyword.value.trim())}`,
-    );
-    if (!response.ok) {
-      const body = await response.json().catch(() => null);
-      throw new Error(body?.detail ?? `${response.status}`);
-    }
-    items.value = await response.json();
-    if (!items.value.length) error.value = "库里没有匹配的品名——先导入提单数据，或换个说法（英文品名最准）";
-  } catch (e) {
-    error.value = (e as Error).message;
-  } finally {
-    busy.value = false;
-  }
+  const found = await run(() => suggestHs(keyword.value.trim()));
+  if (found === undefined) return;
+  items.value = found;
+  if (!found.length) error.value = "库里没有匹配的品名——先导入提单数据，或换个说法（英文品名最准）";
 }
 
 function pick(hs: string) {
