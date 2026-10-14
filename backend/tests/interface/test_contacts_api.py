@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tests.import_helper import post_import
+
 SEED_DIR = Path(__file__).resolve().parents[2] / "app" / "seed"
 AS_OF = "2026-10-09"
 
@@ -11,10 +13,10 @@ AS_OF = "2026-10-09"
 def _seed(client) -> dict:
     products_csv = (SEED_DIR / "products.csv").read_text(encoding="utf-8-sig")
     bills_csv = (SEED_DIR / "sample_bills.csv").read_text(encoding="utf-8-sig")
-    r1 = client.post(
+    r1 = post_import(client,
         "/api/products/import", files={"file": ("products.csv", products_csv, "text/csv")}
     )
-    r2 = client.post(
+    r2 = post_import(client,
         "/api/bills/import",
         files={"file": ("sample_bills.csv", bills_csv, "text/csv")},
         data={"as_of": AS_OF},
@@ -133,7 +135,7 @@ class Test联系人CSV导入:
                 ["", "BROOKLYN APPAREL", "US", "Mary", "GM", "mary@ex.com", ""],
             ]
         )
-        r = client.post(
+        r = post_import(client,
             "/api/contacts/import", files={"file": ("c.csv", csv_text, "text/csv")}
         )
         assert r.status_code == 200, r.text
@@ -149,7 +151,7 @@ class Test联系人CSV导入:
                 ["99999", "", "", "X", "", "x@ex.com", ""],
             ]
         )
-        body = client.post(
+        body = post_import(client,
             "/api/contacts/import", files={"file": ("c.csv", csv_text, "text/csv")}
         ).json()
         assert body["added"] == 1
@@ -261,7 +263,7 @@ class Test导入与更新的脏写行为:
         writer.writerow([cid, "", "", "D", "", "dup@ex.com", ""])
         writer.writerow([cid, "", "", "S", "", "second@ex.com", ""])
         csv_text = buf.getvalue()
-        body = client.post(
+        body = post_import(client,
             "/api/contacts/import", files={"file": ("c.csv", csv_text, "text/csv")}
         ).json()
         assert body["added"] == 2 and body["duplicates"] == 1
@@ -287,7 +289,7 @@ class Test导入与更新的脏写行为:
             "company_id,company_name,country,name,title,email,phone\n"
             ",BROOKLYN APPAREL,,NoCountry,,nc@ex.com,\n"
         )
-        body = client.post(
+        body = post_import(client,
             "/api/contacts/import", files={"file": ("c.csv", csv_text, "text/csv")}
         ).json()
         assert body["added"] == 0

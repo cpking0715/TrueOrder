@@ -4,16 +4,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tests.import_helper import post_import
+
 SEED_DIR = Path(__file__).resolve().parents[2] / "app" / "seed"
 AS_OF = "2026-10-09"
 
 
 def _seed(client) -> tuple[int, int]:
-    client.post(
+    post_import(client,
         "/api/products/import",
         files={"file": ("p.csv", (SEED_DIR / "products.csv").read_text("utf-8-sig"), "text/csv")},
     )
-    client.post(
+    post_import(client,
         "/api/bills/import",
         files={
             "file": ("b.csv", (SEED_DIR / "sample_bills.csv").read_text("utf-8-sig"), "text/csv")

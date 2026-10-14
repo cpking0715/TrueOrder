@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.import_helper import post_import
+
 SEED_DIR = Path(__file__).resolve().parents[2] / "app" / "seed"
 AS_OF = "2026-10-09"
 
@@ -13,12 +15,12 @@ AS_OF = "2026-10-09"
 def seed_via_api(client) -> dict:
     products_csv = (SEED_DIR / "products.csv").read_text(encoding="utf-8-sig")
     bills_csv = (SEED_DIR / "sample_bills.csv").read_text(encoding="utf-8-sig")
-    r1 = client.post(
+    r1 = post_import(client,
         "/api/products/import",
         files={"file": ("products.csv", products_csv, "text/csv")},
     )
     assert r1.status_code == 200, r1.text
-    r2 = client.post(
+    r2 = post_import(client,
         "/api/bills/import",
         files={"file": ("sample_bills.csv", bills_csv, "text/csv")},
         data={"as_of": AS_OF},
@@ -53,7 +55,7 @@ class Test导入与产品列表:
     def test_重复导入提单全部去重(self, client):
         seed_via_api(client)
         bills_csv = (SEED_DIR / "sample_bills.csv").read_text(encoding="utf-8-sig")
-        r = client.post(
+        r = post_import(client,
             "/api/bills/import",
             files={"file": ("sample_bills.csv", bills_csv, "text/csv")},
             data={"as_of": AS_OF},
@@ -73,7 +75,7 @@ class Test导入与产品列表:
         assert board["counts"]["precise"] == 2
 
     def test_非UTF8上传返回422(self, client):
-        r = client.post(
+        r = post_import(client,
             "/api/products/import",
             files={"file": ("products.csv", b"\xff\xfe\x00bad", "text/csv")},
         )
@@ -86,7 +88,7 @@ class Test导入与产品列表:
             "product_description,port,quantity\n"
             "not-a-date,BOL-X,X LLC,\"\",US,Y CO,\"\",CN,CHINA,620462,TROUSERS,NY,1\n"
         )
-        r = client.post(
+        r = post_import(client,
             "/api/bills/import",
             files={"file": ("bad.csv", bad_csv, "text/csv")},
             data={"as_of": AS_OF},
@@ -170,7 +172,7 @@ class Test快速建产品:
 
     def seed_bills_only(self, client) -> None:
         bills_csv = (SEED_DIR / "sample_bills.csv").read_text(encoding="utf-8-sig")
-        r = client.post(
+        r = post_import(client,
             "/api/bills/import",
             files={"file": ("sample_bills.csv", bills_csv, "text/csv")},
             data={"as_of": AS_OF},
@@ -303,11 +305,11 @@ BOTH_BILLS_CSV = """arrival_date,bill_number,consignee_name,consignee_address,co
 
 
 def seed_both_via_api(client) -> int:
-    client.post(
+    post_import(client,
         "/api/products/import",
         files={"file": ("products.csv", BOTH_PRODUCTS_CSV, "text/csv")},
     )
-    client.post(
+    post_import(client,
         "/api/bills/import",
         files={"file": ("bills.csv", BOTH_BILLS_CSV, "text/csv")},
         data={"as_of": AS_OF},
@@ -410,7 +412,7 @@ class Test导出公式注入:
             ]
         )
         bills_csv = buf.getvalue()
-        r = client.post(
+        r = post_import(client,
             "/api/bills/import",
             files={"file": ("evil.csv", bills_csv, "text/csv")},
             data={"as_of": AS_OF},
@@ -430,7 +432,7 @@ class Test上传上限:
 
         client.app.dependency_overrides[get_settings] = lambda: Settings(max_upload_mb=1)
         big = "x" * (1024 * 1024 + 1)
-        r = client.post(
+        r = post_import(client,
             "/api/bills/import",
             files={"file": ("big.csv", big, "text/csv")},
         )

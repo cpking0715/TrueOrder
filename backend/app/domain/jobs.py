@@ -20,6 +20,7 @@ JobKind = Literal[
     "poll_imap",
     "verify_email",
     "discover_buyers",
+    "import_csv",
 ]
 
 DEAD_TASK_TIMEOUT = timedelta(minutes=10)
@@ -38,6 +39,7 @@ class Job:
     run_after: datetime | None = None
     attempts: int = 0
     max_attempts: int = 3
+    result: dict[str, Any] | None = None
     last_error: str | None = None
     locked_at: datetime | None = None
     created_at: datetime | None = None

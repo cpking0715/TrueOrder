@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.import_helper import post_import
+
 SEED_DIR = Path(__file__).resolve().parents[2] / "app" / "seed"
 AS_OF = "2026-10-09"
 
@@ -15,10 +17,10 @@ AS_OF = "2026-10-09"
 def _seed(client) -> None:
     products_csv = (SEED_DIR / "products.csv").read_text(encoding="utf-8-sig")
     bills_csv = (SEED_DIR / "sample_bills.csv").read_text(encoding="utf-8-sig")
-    r1 = client.post(
+    r1 = post_import(client,
         "/api/products/import", files={"file": ("products.csv", products_csv, "text/csv")}
     )
-    r2 = client.post(
+    r2 = post_import(client,
         "/api/bills/import",
         files={"file": ("sample_bills.csv", bills_csv, "text/csv")},
         data={"as_of": AS_OF},
@@ -169,7 +171,8 @@ class Test第一期获客闭环冒烟:
             f"/api/products/{pid}/buyers/enrich", json={"limit": 3, "confirm": False}
         ).json()
         assert estimate["candidates"] >= 1
-        assert client.get("/api/jobs").json()["total"] == 0
+        jobs = client.get("/api/jobs").json()["items"]
+        assert [j for j in jobs if j["kind"] != "import_csv"] == []
 
         # 确认执行 → 入队 → worker 消费 → 联系人出现
         executed = client.post(
@@ -177,8 +180,8 @@ class Test第一期获客闭环冒烟:
         ).json()
         assert executed["enqueued"] >= 1
         self._run_worker(client)
-        done = client.get("/api/jobs", params={"status": "done"}).json()["total"]
-        assert done >= executed["enqueued"]
+        done = client.get("/api/jobs", params={"status": "done"}).json()["items"]
+        assert len([j for j in done if j["kind"] != "import_csv"]) >= executed["enqueued"]
 
         # 再次估计：已有联系人与近期查过的都被跳过
         again = client.post(

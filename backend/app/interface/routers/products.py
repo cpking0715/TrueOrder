@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.domain.parse import build_quick_product
+from app.infrastructure.import_jobs import enqueue_import
 from app.infrastructure.importers import CsvImporter
 from app.infrastructure.queries import BuyerQueryFilters, SqlBuyerQueries
 from app.infrastructure.repositories import SqlProductRepository
@@ -28,7 +29,7 @@ from app.interface.deps import (
 from app.interface.mapping import buyer_to_out, product_row_to_out
 from app.interface.schemas import (
     BuyerListOut,
-    ImportSummaryOut,
+    ImportJobOut,
     ProductCreateIn,
     ProductOut,
 )
@@ -155,6 +156,7 @@ def export_buyers(
         limit=100000,
         offset=0,
     )
+
     def reason_text(buyer) -> str:
         return "；".join(
             f"{r['text']}（提单 {'/'.join(str(i) for i in r.get('bill_ids', []))}）"
@@ -169,7 +171,18 @@ def export_buyers(
     def stream() -> Iterator[str]:
         yield "\ufeff"  # Excel 友好的 BOM
         yield _row(
-            ["公司名", "国家", "城市", "等级", "票数", "最近到港", "供货方", "同名冲突", "排除原因", "得分理由"]  # noqa: E501
+            [
+                "公司名",
+                "国家",
+                "城市",
+                "等级",
+                "票数",
+                "最近到港",
+                "供货方",
+                "同名冲突",
+                "排除原因",
+                "得分理由",
+            ]  # noqa: E501
         )
         for buyer in queries.iter_buyers(filters):
             yield _row(
@@ -195,16 +208,13 @@ def export_buyers(
     )
 
 
-@router.post("/import", response_model=ImportSummaryOut)
+@router.post("/import", response_model=ImportJobOut, status_code=202)
 def import_products_csv(
     upload: CsvUpload = Depends(read_csv_upload),
-    importer: CsvImporter = Depends(get_importer),
+    session: Session = Depends(get_session),
 ):
-    """产品目录 CSV 导入：每行一个产品 + 税号 + 买家类型，多行税号自动合并。"""
-    summary = importer.import_products(upload.text, source=upload.filename)
-    # 产品目录变化可能影响既有得分（关键词），导入后重打分
-    rescores = importer.rescore(date.today())
-    return ImportSummaryOut(**summary.__dict__, rescore=[r.__dict__ for r in rescores])
+    """产品目录 CSV 导入（后台任务）：多行税号自动合并，导入后全量重打分。"""
+    return ImportJobOut(job_id=enqueue_import(session, "products", upload.filename, upload.text))
 
 
 @router.post("/{product_id}/discover-buyers", status_code=202)
@@ -221,7 +231,12 @@ def discover_buyers(
         raise HTTPException(status_code=404, detail=f"产品 {product_id} 不存在")
     name, hs = queries.product_name_and_primary_hs(product_id)
     queue = SqlJobQueue(session)
-    job_id = queue.enqueue("discover_buyers", {
-        "product_id": product_id, "category": name, "hs_code": hs,
-    })
+    job_id = queue.enqueue(
+        "discover_buyers",
+        {
+            "product_id": product_id,
+            "category": name,
+            "hs_code": hs,
+        },
+    )
     return {"job_id": job_id, "kind": "discover_buyers", "category": name}

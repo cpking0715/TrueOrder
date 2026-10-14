@@ -1,7 +1,8 @@
 """后台任务 worker：`uv run python -m app.worker` 轮询认领并执行队列任务。
 
 处理器注册表见 app.infrastructure.enrichment.build_registry：
-find_contacts / crawl_website / verify_email（verify 仅配置 Hunter Key 后产生）。
+find_contacts / crawl_website / verify_email（仅配 Hunter Key 后产生）；
+send_email / import_csv 在 build_handlers 另行注册。
 未知类型的任务会被永久标记 failed 并写明原因，便于在任务状态页发现配置遗漏。
 """
 
@@ -31,6 +32,9 @@ def build_handlers() -> dict[str, Handler]:
     registry = build_registry(directory=WikidataDirectory())
     from app.infrastructure.outreach import make_send_email_handler
     registry["send_email"] = make_send_email_handler()
+    from app.infrastructure.import_jobs import make_import_csv_handler
+
+    registry["import_csv"] = make_import_csv_handler()
     return registry
 
 

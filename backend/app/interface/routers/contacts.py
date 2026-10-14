@@ -8,8 +8,10 @@ from collections.abc import Iterator
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
 
 from app.infrastructure.contact_repository import SqlContactRepository
+from app.infrastructure.import_jobs import enqueue_import
 from app.infrastructure.queries import BuyerQueryFilters, SqlBuyerQueries
 from app.interface.csv_safety import sanitize_csv_cell
 from app.interface.deps import (
@@ -17,6 +19,7 @@ from app.interface.deps import (
     default_audience,
     get_buyer_queries,
     get_contact_repository,
+    get_session,
     read_csv_upload,
 )
 from app.interface.schemas import (
@@ -24,8 +27,8 @@ from app.interface.schemas import (
     CompanyWebsiteOut,
     ContactCreateIn,
     ContactOut,
-    ContactsImportOut,
     ContactUpdateIn,
+    ImportJobOut,
 )
 
 router = APIRouter(prefix="/api", tags=["contacts"])
@@ -77,9 +80,7 @@ def add_contact(
     if result.error == "invalid_email":
         raise HTTPException(status_code=422, detail="邮箱格式非法")
     if result.error == "duplicate":
-        raise HTTPException(
-            status_code=409, detail={"message": "该公司已有此邮箱的联系人"}
-        )
+        raise HTTPException(status_code=409, detail={"message": "该公司已有此邮箱的联系人"})
     return _to_out(result.contact)
 
 
@@ -100,9 +101,7 @@ def update_contact(
     if result is None:
         raise HTTPException(status_code=404, detail=f"联系人 {contact_id} 不存在")
     if result == "duplicate":
-        raise HTTPException(
-            status_code=409, detail={"message": "该公司已有此邮箱的联系人"}
-        )
+        raise HTTPException(status_code=409, detail={"message": "该公司已有此邮箱的联系人"})
     if result == "invalid_email":
         raise HTTPException(status_code=422, detail="邮箱格式非法")
     return _to_out(result)
@@ -128,24 +127,16 @@ def patch_company(
     if result is None:
         raise HTTPException(status_code=404, detail=f"公司 {company_id} 不存在")
     website, confirmed, source, confidence = result
-    return CompanyWebsiteOut(
-        company_id=company_id, website=website, website_confirmed=confirmed
-    )
+    return CompanyWebsiteOut(company_id=company_id, website=website, website_confirmed=confirmed)
 
 
-@router.post("/contacts/import", response_model=ContactsImportOut)
+@router.post("/contacts/import", response_model=ImportJobOut, status_code=202)
 def import_contacts_csv(
     upload: CsvUpload = Depends(read_csv_upload),
-    repo: SqlContactRepository = Depends(get_contact_repository),
+    session: Session = Depends(get_session),
 ):
-    """联系人 CSV 导入：company_id 或「企业名+国家」定位企业，name/title/email/phone。"""
-    summary = repo.import_csv(upload.text, source_ref=upload.filename)
-    return ContactsImportOut(
-        added=summary.added,
-        duplicates=summary.duplicates,
-        company_not_found=summary.company_not_found,
-        invalid_rows=summary.invalid_rows,
-    )
+    """联系人 CSV 导入（后台任务）：company_id 或「企业名+国家」定位企业。"""
+    return ImportJobOut(job_id=enqueue_import(session, "contacts", upload.filename, upload.text))
 
 
 @router.get("/products/{product_id}/contacts/export.csv")
@@ -188,9 +179,25 @@ def export_contacts(
     def stream() -> Iterator[str]:
         yield "﻿"
         yield _row_line(
-            ["公司名", "国家", "城市", "等级", "票数", "最近到港", "联系人姓名", "职位",
-             "邮箱", "电话", "是否通用邮箱", "验证状态", "来源", "来源链接", "获取时间",
-             "官网", "官网置信度"]
+            [
+                "公司名",
+                "国家",
+                "城市",
+                "等级",
+                "票数",
+                "最近到港",
+                "联系人姓名",
+                "职位",
+                "邮箱",
+                "电话",
+                "是否通用邮箱",
+                "验证状态",
+                "来源",
+                "来源链接",
+                "获取时间",
+                "官网",
+                "官网置信度",
+            ]
         )
         batch: list = []
         for buyer in queries.iter_buyers(filters):
@@ -236,5 +243,3 @@ def export_contacts(
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
-
-

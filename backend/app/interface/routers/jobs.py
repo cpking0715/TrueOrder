@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.infrastructure.jobs import SqlJobQueue
@@ -24,3 +24,11 @@ def list_jobs(
         items=[JobOut(**job.__dict__) for job in jobs],
         total=len(jobs),
     )
+
+
+@router.get("/{job_id}", response_model=JobOut)
+def get_job(job_id: int, session: Session = Depends(get_session)):
+    job = SqlJobQueue(session).get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    return JobOut(**job.__dict__)

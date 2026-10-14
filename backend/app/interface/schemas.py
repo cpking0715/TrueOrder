@@ -194,6 +194,14 @@ class JobOut(BaseModel):
     run_after: datetime | None = None
     last_error: str | None = None
     created_at: datetime | None = None
+    result: dict | None = None
+
+
+class ImportJobOut(BaseModel):
+    """CSV 导入已入队：前端按 job_id 轮询 /api/jobs/{job_id}，完成后读 result。"""
+
+    job_id: int
+    status: str = "queued"
 
 
 class JobsListOut(BaseModel):
