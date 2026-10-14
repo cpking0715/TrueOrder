@@ -244,6 +244,33 @@ class JobORM(Base):
     )
 
 
+class CompanyLeadSourceORM(Base):
+    """企业在某产品上的非提单来源线索（目前：AI 买家发现）。
+
+    商机（opportunities）同样算线索来源，但它代表用户已承诺跟进，不适合承载批量 AI 名单，
+    因此 AI 发现单独落这里；打分时两者合并为 CompanyFacts.lead_sources。
+    """
+
+    __tablename__ = "company_lead_sources"
+    __table_args__ = (
+        UniqueConstraint("product_id", "company_id", "source", name="uq_lead_source"),
+        CheckConstraint("source IN ('ai_discover')", name="ck_lead_source"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    product_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("products.id", ondelete="CASCADE"), index=True
+    )
+    company_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("companies.id", ondelete="CASCADE"), index=True
+    )
+    source: Mapped[str] = mapped_column(String(32))
+    source_ref: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class JobUploadORM(Base):
     """后台导入任务的上传暂存（CSV 原文不进 jobs.payload，避免任务列表载入大字段）。"""
 

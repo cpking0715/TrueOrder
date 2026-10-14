@@ -15,14 +15,17 @@ from app.domain.entities import (
     BillEvidence,
     CompanyFacts,
     HsAssignment,
+    LeadSource,
     ProductConfig,
     ScoreReason,
     ScoreResult,
 )
 from app.domain.normalize import months_before, normalize_company_name
 from app.infrastructure.orm import (
+    CompanyLeadSourceORM,
     CompanyORM,
     CompanyScoreORM,
+    OpportunityORM,
     ProductHsCodeORM,
     ProductORM,
     RawBillORM,
@@ -36,8 +39,7 @@ def _to_product_config(product: ProductORM, hs_rows: Sequence[ProductHsCodeORM])
         name=product.name,
         buyer_type=product.buyer_type,
         hs_assignments=tuple(
-            HsAssignment(hs_code=r.hs_code, audience=r.audience, note=r.note or "")
-            for r in hs_rows
+            HsAssignment(hs_code=r.hs_code, audience=r.audience, note=r.note or "") for r in hs_rows
         ),
         buyer_keywords=tuple(product.buyer_keywords or ()),
         peer_keywords=tuple(product.peer_keywords or ()),
@@ -163,25 +165,30 @@ class SqlBuyerPoolReader:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def load_pool(self, family_prefixes: Sequence[str], as_of: date) -> list[CompanyFacts]:
-        if not family_prefixes:
-            return []
-        window_start = months_before(as_of, 24)
-        bills = list(
-            self._session.scalars(
-                select(RawBillORM).where(
-                    func.left(RawBillORM.hs_code, 4).in_(list(family_prefixes)),
-                    RawBillORM.arrival_date >= window_start,
+    def load_pool(
+        self, family_prefixes: Sequence[str], as_of: date, product_id: int | None = None
+    ) -> list[CompanyFacts]:
+        leads = self._lead_sources(product_id) if product_id is not None else {}
+        bills: list[RawBillORM] = []
+        if family_prefixes:
+            window_start = months_before(as_of, 24)
+            bills = list(
+                self._session.scalars(
+                    select(RawBillORM).where(
+                        func.left(RawBillORM.hs_code, 4).in_(list(family_prefixes)),
+                        RawBillORM.arrival_date >= window_start,
+                    )
                 )
             )
-        )
+        if not bills and not leads:
+            return []
         consignee_ids = {b.consignee_company_id for b in bills if b.consignee_company_id}
         shipper_ids = {b.shipper_company_id for b in bills if b.shipper_company_id}
         companies = {
             c.id: c
             for c in self._session.scalars(
                 select(CompanyORM).where(
-                    CompanyORM.id.in_(list(consignee_ids | shipper_ids))
+                    CompanyORM.id.in_(list(consignee_ids | shipper_ids | set(leads)))
                 )
             )
         }
@@ -209,9 +216,15 @@ class SqlBuyerPoolReader:
                 )
             )
 
+        # 无合格税号提单、只有来源线索的企业也进池（打分层决定只入潜在层）
+        for company_id in leads:
+            facts_by_company.setdefault(company_id, [])
+
         result: list[CompanyFacts] = []
         for company_id, evidences in facts_by_company.items():
-            company = companies[company_id]
+            company = companies.get(company_id)
+            if company is None:
+                continue
             result.append(
                 CompanyFacts(
                     company_id=company.id,
@@ -220,9 +233,36 @@ class SqlBuyerPoolReader:
                     address=company.address_guess or "",
                     country=company.country,
                     bills=tuple(sorted(evidences, key=lambda e: (e.arrival_date, e.bill_id))),
+                    lead_sources=tuple(leads.get(company_id, ())),
                 )
             )
         return result
+
+    def _lead_sources(self, product_id: int) -> dict[int, list[LeadSource]]:
+        """该产品的非提单来源线索：AI 买家发现记录 + 已建商机（手动加入跟进）。"""
+        out: dict[int, list[LeadSource]] = defaultdict(list)
+        for company_id, source, ref in self._session.execute(
+            select(
+                CompanyLeadSourceORM.company_id,
+                CompanyLeadSourceORM.source,
+                CompanyLeadSourceORM.source_ref,
+            ).where(CompanyLeadSourceORM.product_id == product_id)
+        ):
+            label = "AI 买家发现" if source == "ai_discover" else source
+            out[company_id].append(LeadSource(kind=source, label=label, ref=ref or ""))
+        for company_id, opp_id, stage in self._session.execute(
+            select(OpportunityORM.company_id, OpportunityORM.id, OpportunityORM.stage).where(
+                OpportunityORM.product_id == product_id,
+                # 已流失＝用户判定不跟，不再作为线索
+                OpportunityORM.stage != "lost",
+            )
+        ):
+            out[company_id].append(
+                LeadSource(
+                    kind="opportunity", label=f"已加入跟进（{stage}）", ref=f"opportunity:{opp_id}"
+                )
+            )
+        return out
 
 
 class SqlScoreWriter:
