@@ -138,7 +138,10 @@ class WikidataDirectory:
         return COUNTRY_Q_MAP.get(qid, "")
 
     def _http_get(self, url: str, params: dict) -> dict:
+        if not url.startswith("https://"):
+            raise ValueError(f"只允许 https 目录接口：{url}")
         full = f"{url}?{urllib.parse.urlencode(params)}"
-        request = urllib.request.Request(full, headers={"User-Agent": USER_AGENT})
-        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+        # 上一行已限定 https 方案（URL 来自代码常量），排除 file:/自定义方案
+        request = urllib.request.Request(full, headers={"User-Agent": USER_AGENT})  # noqa: S310
+        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:  # noqa: S310
             return json.loads(response.read().decode("utf-8"))

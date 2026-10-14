@@ -84,7 +84,7 @@ def bill_dedup_hash(line: BillLine) -> str:
             _squash_desc(line.quantity),
         )
     )
-    return hashlib.md5(payload.encode("utf-8")).hexdigest()
+    return hashlib.md5(payload.encode("utf-8"), usedforsecurity=False).hexdigest()
 
 
 def _squash_desc(text: str) -> str:
