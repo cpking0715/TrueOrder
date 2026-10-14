@@ -9,6 +9,8 @@ import pytest
 from app.domain.outreach import (
     TEMPLATE_VARIABLES,
     UNSUBSCRIBE_LINE,
+    GuardRejection,
+    SendRejection,
     build_unsubscribe_header,
     check_send_guards,
     compose_email_body,
@@ -90,6 +92,7 @@ class Test护栏:
         params = dict(
             company_address="1 Main St, Springfield, US", reply_to="reply@myco.com",
             email="ok@x.com", do_not_contact=False, verify_status="unknown",
+            source="finder", source_ref="hunter:domain-search",
             suppressions=[], recent_sends=[], sent_today=0,
         )
         params.update(over)
@@ -99,33 +102,46 @@ class Test护栏:
         assert check_send_guards(**self._base()) is None
 
     def test_不再联系拒绝(self):
-        assert "不再联系" in check_send_guards(**self._base(do_not_contact=True))
+        r = check_send_guards(**self._base(do_not_contact=True))
+        assert r.reason is SendRejection.DO_NOT_CONTACT
 
     def test_无效邮箱拒绝(self):
-        assert "invalid" in check_send_guards(**self._base(verify_status="invalid"))
+        r = check_send_guards(**self._base(verify_status="invalid"))
+        assert r.reason is SendRejection.INVALID_EMAIL
 
     def test_抑制名单拒绝(self):
-        assert "抑制" in check_send_guards(
-            **self._base(suppressions=[{"email": "ok@x.com"}]))
+        r = check_send_guards(**self._base(suppressions=[{"email": "ok@x.com"}]))
+        assert r.reason is SendRejection.SUPPRESSED
 
     def test_额度用完拒绝(self):
-        assert "额度" in check_send_guards(**self._base(sent_today=30))
+        assert check_send_guards(**self._base(sent_today=30)).reason is SendRejection.QUOTA
 
     def test_冷却拒绝(self):
         now = datetime.now(UTC)
-        assert "冷却" in check_send_guards(
-            **self._base(recent_sends=[now - timedelta(hours=12)]))
+        r = check_send_guards(**self._base(recent_sends=[now - timedelta(hours=12)]))
+        assert r.reason is SendRejection.COOLDOWN
 
 
     def test_缺公司地址拒绝(self):
-        assert "COMPANY_ADDRESS" in check_send_guards(**self._base(company_address=""))
+        r = check_send_guards(**self._base(company_address=""))
+        assert r.reason is SendRejection.SENDER_CONFIG_MISSING
+        assert "COMPANY_ADDRESS" in r.message
 
     def test_缺退订回复地址拒绝(self):
-        assert "SMTP_REPLY_TO" in check_send_guards(**self._base(reply_to="  "))
+        r = check_send_guards(**self._base(reply_to="  "))
+        assert r.reason is SendRejection.SENDER_CONFIG_MISSING
+        assert "SMTP_REPLY_TO" in r.message
 
-    def test_配置缺失原因不被误判为抑制或额度(self):
-        reason = check_send_guards(**self._base(company_address="", reply_to=""))
-        assert "抑制" not in reason and "额度" not in reason
+    def test_缺来源记录拒绝(self):
+        r = check_send_guards(**self._base(source="finder", source_ref=""))
+        assert r.reason is SendRejection.NO_SOURCE
+
+    def test_手工录入无source_ref也算有来源(self):
+        assert check_send_guards(**self._base(source="manual", source_ref="")) is None
+
+    def test_返回结构化原因与展示文案(self):
+        r = check_send_guards(**self._base(do_not_contact=True))
+        assert isinstance(r, GuardRejection) and r.message
 
 
 class Test退订:
