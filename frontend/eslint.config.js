@@ -35,10 +35,10 @@ export default tseslint.config(
     },
   },
   {
-    // 页面（views）比组件宽松：引导重组，不立刻炸既有页（两页已近 260 行）
+    // 页面（views）比组件宽松但已收紧为 error：大页已拆成组件 + composable（均 < 200 行）
     files: ["src/features/**/views/**/*.vue"],
     rules: {
-      "max-lines": ["warn", { max: 280, skipBlankLines: true, skipComments: true }],
+      "max-lines": ["error", { max: 220, skipBlankLines: true, skipComments: true }],
     },
   },
   {
