@@ -76,6 +76,7 @@ export type EnrichEstimate = components["schemas"]["EnrichExecutedOut"];
 
 export interface EnrichRequest {
   tier?: string;
+  audience?: string;
   q?: string;
   country?: string;
   min_shipments?: number;

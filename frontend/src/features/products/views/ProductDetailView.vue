@@ -168,6 +168,7 @@ watch(
       :product-id="productId"
       :filters="filters.state.value"
       :export-url="filters.exportUrl.value"
+      :audience="audience"
     />
   </div>
   <div

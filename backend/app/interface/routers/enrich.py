@@ -39,6 +39,7 @@ class EnrichEstimateOut(BaseModel):
 
 class EnrichConfirmIn(BaseModel):
     tier: str | None = None
+    audience: str | None = None  # 缺省 = 产品默认提单受众；lead = 意向线索列表
     q: str | None = None
     country: str | None = None
     min_shipments: int | None = Field(default=None, ge=1)
@@ -132,7 +133,9 @@ def enrich_buyers(
 ):
     """批量补全当前筛选的前 N 家：不带 confirm 只返回额度估计；confirm=true 才入队。"""
 
-    audience = default_audience(queries, product_id)
+    audience = payload.audience or default_audience(queries, product_id)
+    if audience not in ("importer", "factory", "lead"):
+        raise HTTPException(status_code=422, detail="audience 必须是 importer、factory 或 lead")
     tiers = [payload.tier] if payload.tier else ["potential", "precise"]
     buyers: list = []
     for tier in tiers:

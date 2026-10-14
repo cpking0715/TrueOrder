@@ -914,6 +914,8 @@ export interface components {
         EnrichConfirmIn: {
             /** Tier */
             tier?: string | null;
+            /** Audience */
+            audience?: string | null;
             /** Q */
             q?: string | null;
             /** Country */

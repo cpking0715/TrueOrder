@@ -114,6 +114,36 @@ class Test批量补全:
         pending = client.get("/api/jobs", params={"status": "pending"}).json()["total"]
         assert pending == 0
 
+    def test_意向线索页签只从线索列表取候选_提单受众不变(self, client):
+        from datetime import date
+
+        from app.infrastructure.importers import CsvImporter
+        from app.infrastructure.orm import CompanyLeadSourceORM, CompanyORM
+        from app.interface.deps import get_session
+
+        product_id = self.seed_product_with_buyers(client)
+        url = f"/api/products/{product_id}/buyers/enrich"
+        before = client.post(url, json={"limit": 50, "confirm": False}).json()
+        session = next(client.app.dependency_overrides[get_session]())
+        lead = CompanyORM(normalized_name="SOLO DESIGNER STUDIO", country="US",
+                          name_variants=["SOLO DESIGNER STUDIO"])
+        session.add(lead)
+        session.flush()
+        session.add(CompanyLeadSourceORM(product_id=product_id, company_id=lead.id,
+                                         source="ai_discover", source_ref="t"))
+        session.commit()
+        CsvImporter(session).rescore_one(product_id, date(2026, 10, 9))
+        session.commit()
+
+        body = client.post(url, json={"limit": 50, "confirm": True, "audience": "lead"}).json()
+        assert body["candidates"] == 1 and body["enqueued"] == 1
+        job = client.get(f"/api/jobs/{body['job_ids'][0]}").json()
+        assert job["payload"] == {"company_id": lead.id, "product_id": product_id}
+
+        after = client.post(url, json={"limit": 50, "confirm": False}).json()
+        assert after["candidates"] == before["candidates"]  # 默认提单受众不受线索影响
+        assert client.post(url, json={"limit": 5, "audience": "x"}).status_code == 422
+
     def test_confirm入队全部不按额度截断(self, client):
         """免费目录源优先后，截断过度保守：全部入队，计量不足执行期延期（QuotaDeferred）。"""
         from app.core.config import Settings, get_settings

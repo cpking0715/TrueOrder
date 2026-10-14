@@ -102,6 +102,21 @@ describe("EnrichBar 批量补全", () => {
   });
 });
 
+describe("EnrichBar 受众", () => {
+  it("意向线索页签的估计请求带 audience=lead", async () => {
+    vi.mocked(fetchEnrichUsage).mockRejectedValue(new Error("ignore"));
+    vi.mocked(enrichBuyers).mockResolvedValue({
+      candidates: 1, skipped_has_contacts: 0, skipped_queried_recently: 0,
+      capped_by_quota: 0, credits_needed: 1, daily_cap: 20, used_today: 0,
+      enqueued: 0, job_ids: [],
+    });
+    render(EnrichBar, { props: { productId: 2, query: { audience: "lead" } } });
+    await fireEvent.click(screen.getByTestId("enrich-estimate"));
+    await screen.findByTestId("enrich-estimate-text");
+    expect(enrichBuyers).toHaveBeenCalledWith(2, expect.objectContaining({ audience: "lead" }));
+  });
+});
+
 describe("ContactsPanel 查找按钮", () => {
   it("查找联系方式入队并显示任务提示", async () => {
     vi.mocked(fetchContacts).mockResolvedValue([]);

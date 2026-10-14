@@ -4,7 +4,12 @@ import { withApiToken } from "@/api/client";
 import EnrichBar from "./EnrichBar.vue";
 import type { FilterState } from "../composables/useBuyerFilters";
 
-const props = defineProps<{ productId: number; filters: FilterState; exportUrl: string }>();
+const props = defineProps<{
+  productId: number;
+  filters: FilterState;
+  exportUrl: string;
+  audience?: string;
+}>();
 
 // 联系人导出与买家导出共用同一筛选参数：取 buyers 导出 URL 的查询串换成 contacts 路径
 const contactsExportUrl = computed(() => {
@@ -20,6 +25,7 @@ const contactsExportUrl = computed(() => {
       :product-id="productId"
       :query="{
         tier: filters.tier,
+        audience,
         q: filters.q,
         country: filters.country,
         minShipments: filters.minShipments,
