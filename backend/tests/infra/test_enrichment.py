@@ -235,6 +235,30 @@ class Test补全日志:
         assert log.calls_today() == 1
         assert log.companies_queried_within([company.id, 99999]) == {company.id}
 
+    @pytest.mark.parametrize("db_tz", ["Asia/Shanghai", "America/Los_Angeles"])
+    def test_当日计数按UTC自然日_不受数据库会话时区影响(self, session, company, db_tz):
+        """回归：曾用 date(called_at)=今天(UTC)，取的是 PG 会话时区，本地零点附近漂移。"""
+        from datetime import timedelta as _td
+
+        from sqlalchemy import text as _text
+
+        from app.core.timeutil import utc_day_bounds
+        from app.infrastructure.orm import EnrichmentCallORM
+
+        session.execute(_text(f"SET TIME ZONE '{db_tz}'"))
+        start, _end = utc_day_bounds()
+        session.add_all([
+            EnrichmentCallORM(provider="fake", company_id=company.id,
+                              called_at=start + _td(minutes=1)),   # 今天（UTC）
+            EnrichmentCallORM(provider="fake", company_id=company.id,
+                              called_at=start - _td(minutes=1)),   # 昨天（UTC）
+        ])
+        session.commit()
+        log = SqlEnrichmentLog(session)
+        assert log.calls_today() == 1
+        assert log.reserve("fake", company.id, cap=2) is not None  # 已用 1 < 2
+        assert log.reserve("fake", company.id, cap=2) is None      # 已用 2 = cap
+
     def test_重复导入同邮箱只入一条(self, session, company, queue):
         company.website = "https://brooklynapparel.com"
         company.website_confirmed = True

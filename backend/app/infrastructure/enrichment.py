@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
+from app.core.timeutil import utc_day_bounds
 from app.domain.contacts import website_confidence
 from app.domain.ports import ContactFinder as ContactFinderProtocol
 from app.domain.ports import WebsiteDirectory as WebsiteDirectoryProtocol
@@ -23,11 +24,12 @@ class SqlEnrichmentLog:
         self._session = session
 
     def calls_today(self, today: date | None = None) -> int:
-        today = today or datetime.now(UTC).date()
+        start, end = utc_day_bounds(today)
         return int(
             self._session.scalar(
                 select(func.count()).select_from(EnrichmentCallORM).where(
-                    func.date(EnrichmentCallORM.called_at) == today
+                    EnrichmentCallORM.called_at >= start,
+                    EnrichmentCallORM.called_at < end,
                 )
             )
             or 0
@@ -70,11 +72,13 @@ class SqlEnrichmentLog:
         engine = self._session.bind
         with _S(engine) as tx:
             tx.execute(sql_text("select pg_advisory_xact_lock(918273645)"))
+            start, end = utc_day_bounds()
             used = tx.scalar(
                 sql_text(
                     "select coalesce(sum(credits_used), 0) from enrichment_calls "
-                    "where called_at::date = current_date"
-                )
+                    "where called_at >= :start and called_at < :end"
+                ),
+                {"start": start, "end": end},
             )
             if int(used or 0) >= cap:
                 tx.rollback()
@@ -284,7 +288,8 @@ def make_crawl_website_handler(
                 1 for r in session.scalars(
                     select(EnrichmentCallORM).where(
                         EnrichmentCallORM.provider == "ai-extract",
-                        func.date(EnrichmentCallORM.called_at) == func.current_date(),
+                        EnrichmentCallORM.called_at >= utc_day_bounds()[0],
+                        EnrichmentCallORM.called_at < utc_day_bounds()[1],
                     )
                 )
             )

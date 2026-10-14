@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 SEED_DIR = Path(__file__).resolve().parents[2] / "app" / "seed"
 AS_OF = "2026-10-09"
 
@@ -483,6 +485,38 @@ class Test税号反查:
 
 
 class Test税号自动推荐:
+    """不依赖本机 .env 的 AI Key，也不发真实网络请求：注入测试 Key + 默认假 LLM 响应。"""
+
+    @pytest.fixture(autouse=True)
+    def _fake_ai(self, client, monkeypatch):
+        import app.interface.routers.hs as hs_mod
+        from app.core.config import Settings, get_settings
+
+        client.app.dependency_overrides[get_settings] = lambda: Settings(
+            ai_api_key="test-key", _env_file=None
+        )
+
+        class _Resp:
+            status_code = 200
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {"choices": [{"message": {"content": "620462"}}]}
+
+        monkeypatch.setattr(hs_mod.httpx, "post", lambda *a, **k: _Resp())
+
+    def test_未配置AIKey时422(self, client):
+        from app.core.config import Settings, get_settings
+
+        client.app.dependency_overrides[get_settings] = lambda: Settings(
+            ai_api_key="", _env_file=None
+        )
+        r = client.post("/api/hs/auto", json={"name": "女士棉质长裤"})
+        assert r.status_code == 422
+        assert "AI Key" in r.json()["detail"]
+
     def test_品名自动推荐返回税号(self, client):
         seed_via_api(client)
         r = client.post("/api/hs/auto", json={"name": "女士棉质长裤"})
@@ -490,7 +524,7 @@ class Test税号自动推荐:
         body = r.json()
         assert body["hs_code"]  # 6 位数字
         assert len(body["hs_code"]) >= 6
-        assert body["source"] in ("ai", "ai+confirmed")
+        assert body["source"] == "ai+confirmed"  # 样本库里 620462 有提单
 
     def test_空品名422(self, client):
         assert client.post("/api/hs/auto", json={"name": ""}).status_code == 422
