@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
+from app.core.timeutil import utc_day_bounds
 from app.domain.outreach import (
     build_unsubscribe_header,
     check_send_guards,
@@ -60,7 +61,8 @@ def make_send_email_handler(
             session.scalar(
                 select(func.count()).select_from(EmailMessageORM).where(
                     EmailMessageORM.status == "sent",
-                    func.date(EmailMessageORM.sent_at) == func.current_date(),
+                    EmailMessageORM.sent_at >= utc_day_bounds()[0],
+                    EmailMessageORM.sent_at < utc_day_bounds()[1],
                 )
             ) or 0
         )
