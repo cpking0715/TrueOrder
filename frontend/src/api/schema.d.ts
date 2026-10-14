@@ -650,10 +650,10 @@ export interface components {
         };
         /** Body_import_bills_csv_api_bills_import_post */
         Body_import_bills_csv_api_bills_import_post: {
-            /** File */
-            file: string;
             /** As Of */
             as_of?: string | null;
+            /** File */
+            file: string;
         };
         /** Body_import_contacts_csv_api_contacts_import_post */
         Body_import_contacts_csv_api_contacts_import_post: {
