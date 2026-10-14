@@ -43,6 +43,7 @@
 
 **不建议做（过度设计）：**
 - Celery/Redis、微服务、多租户、登录鉴权（本地单用户，见 1.5）。
+  - 修订（Phase 1，2026-10-14）：不做多用户登录，但提供单一 API 令牌 `TRUEORDER_API_TOKEN`；设置后全部 `/api` 必须携带，留空即关闭（仅限本机 127.0.0.1 开发/演示）。
 - 实时 WebSocket、AI 自动写信（先做模板变量，效果验证后再说）。
 
 ### 1.4 范围裁剪建议（先闭环，后自动化）
@@ -186,6 +187,7 @@ alembic/               # 迁移
 5. **每封邮件必带**：真实发件人名与地址、公司物理地址（配置项，缺失则拒绝启动发送功能）、退订语句（回复 STOP）、`List-Unsubscribe: <mailto:...>` 头。
 6. **每个联系人冷却**：同一联系人两封邮件间隔不得小于 N 天（默认 3），防误触重复发送。
 7. **预览后确认**：界面必须先渲染预览，用户点「加入发送队列」才创建任务，不存在一键群发全部名单。
+8. **实现说明（Phase 1）**：`check_send_guards` 返回结构化 `SendRejection`（`SENDER_CONFIG_MISSING / DO_NOT_CONTACT / INVALID_EMAIL / NO_SOURCE / SUPPRESSED / COOLDOWN / QUOTA`）；缺 `TRUEORDER_COMPANY_ADDRESS` 或 `TRUEORDER_SMTP_REPLY_TO` 一律拒发；联系人须有来源记录（`source` 必填，非 `manual` 还须 `source_ref`）；`QUOTA` 只延期到下一个 UTC 日、邮件保持 `queued`；发送前先落 `sending`，SMTP 报错标 `failed` 并交队列重试，重入遇到 `sending` 不重发（标 `failed` 待人工核对）。「当日」统一按 UTC 自然日计算。
 
 ### 3.6 联系人补全与抓取
 
