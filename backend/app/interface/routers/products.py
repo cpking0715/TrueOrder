@@ -106,8 +106,8 @@ def list_buyers(
 ):
     if audience is None:
         audience = default_audience(queries, product_id)
-    if audience not in ("importer", "factory"):
-        raise HTTPException(status_code=422, detail="audience 必须是 importer 或 factory")
+    if audience not in ("importer", "factory", "lead"):
+        raise HTTPException(status_code=422, detail="audience 必须是 importer、factory 或 lead")
     filters = BuyerQueryFilters(
         product_id=product_id,
         audience=audience,
@@ -143,8 +143,8 @@ def export_buyers(
     """当前筛选导出 CSV（与列表同一查询，不分页）。"""
     if audience is None:
         audience = default_audience(queries, product_id)
-    if audience not in ("importer", "factory"):
-        raise HTTPException(status_code=422, detail="audience 必须是 importer 或 factory")
+    if audience not in ("importer", "factory", "lead"):
+        raise HTTPException(status_code=422, detail="audience 必须是 importer、factory 或 lead")
     filters = BuyerQueryFilters(
         product_id=product_id,
         audience=audience,

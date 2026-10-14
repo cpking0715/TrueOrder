@@ -21,6 +21,7 @@ from app.domain.entities import (
     ScoreResult,
 )
 from app.domain.normalize import months_before, normalize_company_name
+from app.infrastructure.lead_sources import LEAD_SOURCE_LABELS
 from app.infrastructure.orm import (
     CompanyLeadSourceORM,
     CompanyORM,
@@ -248,7 +249,7 @@ class SqlBuyerPoolReader:
                 CompanyLeadSourceORM.source_ref,
             ).where(CompanyLeadSourceORM.product_id == product_id)
         ):
-            label = "AI 买家发现" if source == "ai_discover" else source
+            label = LEAD_SOURCE_LABELS.get(source, source)
             out[company_id].append(LeadSource(kind=source, label=label, ref=ref or ""))
         for company_id, opp_id, stage in self._session.execute(
             select(OpportunityORM.company_id, OpportunityORM.id, OpportunityORM.stage).where(

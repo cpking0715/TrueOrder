@@ -108,9 +108,17 @@ describe("ContactsPanel 查找按钮", () => {
     vi.mocked(requestFindContacts).mockResolvedValue({ job_id: 7, kind: "find_contacts" });
     render(ContactsPanel, { props: { companyId: 9 } });
     await fireEvent.click(screen.getByTestId("find-contacts"));
-    expect(requestFindContacts).toHaveBeenCalledWith(9, "finder");
+    expect(requestFindContacts).toHaveBeenCalledWith(9, "finder", undefined);
     const hint = await screen.findByTestId("enqueued-hint");
     expect(hint.textContent).toContain("#7");
+  });
+
+  it("产品上下文下查找带 productId", async () => {
+    vi.mocked(fetchContacts).mockResolvedValue([]);
+    vi.mocked(requestFindContacts).mockResolvedValue({ job_id: 8, kind: "crawl_website" });
+    render(ContactsPanel, { props: { companyId: 9, productId: 4 } });
+    await fireEvent.click(screen.getByTestId("find-contacts"));
+    expect(requestFindContacts).toHaveBeenCalledWith(9, "finder", 4);
   });
 
   it("抓取官网走 website 方法", async () => {
@@ -119,7 +127,7 @@ describe("ContactsPanel 查找按钮", () => {
     render(ContactsPanel, { props: { companyId: 9 } });
     await fireEvent.click(screen.getByTestId("crawl-website"));
     await waitFor(() => {
-      expect(requestFindContacts).toHaveBeenCalledWith(9, "website");
+      expect(requestFindContacts).toHaveBeenCalledWith(9, "website", undefined);
     });
   });
 });

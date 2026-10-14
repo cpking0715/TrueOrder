@@ -66,6 +66,18 @@ class Test意向线索受众:
         )
         assert blank is not None and blank.exclusion_code == "EX_BLANK_CONSIGNEE"
 
+    def test_同行公司在意向线索不排除_提单受众仍排除(self):
+        peer = lead_facts(
+            name="SHENZHEN GARMENT FACTORY LTD",
+            address="INDUSTRIAL ZONE 3, SHENZHEN, CN",
+            country="CN",
+            bills=(bill(95, date(2026, 3, 1), shipper="SHENZHEN GARMENT FACTORY"),),
+        )
+        on_lead = score_company(GARMENT_PRODUCT, "lead", peer, AS_OF)
+        assert on_lead is not None and on_lead.tier == "potential"
+        on_bills = score_company(GARMENT_PRODUCT, "importer", peer, AS_OF)
+        assert on_bills is not None and on_bills.exclusion_code == "EX_PEER_OVERSEAS"
+
     def test_产品无税号时提单受众空_线索受众仍可出(self):
         product = ProductConfig(product_id=9, code="P-X", name="新品", buyer_type="factory")
         assert score_company(product, "factory", lead_facts(), AS_OF) is None

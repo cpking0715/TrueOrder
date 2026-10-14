@@ -153,7 +153,10 @@ def make_discover_buyers_handler(settings: Settings | None = None):
             session.add(company)
             session.flush()
             _record_lead(session, product_id, company.id, source_ref)
-            queue.enqueue("find_contacts", {"company_id": company.id})
+            queue.enqueue(
+                "find_contacts",
+                {"company_id": company.id, **({"product_id": product_id} if product_id else {})},
+            )
 
         session.commit()
         if product_id:

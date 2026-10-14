@@ -204,7 +204,10 @@ export interface paths {
         /** List Contacts */
         get: operations["list_contacts_api_companies__company_id__contacts_get"];
         put?: never;
-        /** Add Contact */
+        /**
+         * Add Contact
+         * @description 手动录入；带 product_id（从产品页抽屉添加）时记为该产品的 contact_manual 线索。
+         */
         post: operations["add_contact_api_companies__company_id__contacts_post"];
         delete?: never;
         options?: never;
@@ -1724,7 +1727,9 @@ export interface operations {
     };
     add_contact_api_companies__company_id__contacts_post: {
         parameters: {
-            query?: never;
+            query?: {
+                product_id?: number | null;
+            };
             header?: never;
             path: {
                 company_id: number;
@@ -1959,6 +1964,7 @@ export interface operations {
         parameters: {
             query?: {
                 method?: string;
+                product_id?: number | null;
             };
             header?: never;
             path: {

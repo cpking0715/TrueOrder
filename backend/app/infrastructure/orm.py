@@ -245,7 +245,7 @@ class JobORM(Base):
 
 
 class CompanyLeadSourceORM(Base):
-    """企业在某产品上的非提单来源线索（目前：AI 买家发现）。
+    """企业在某产品上的非提单来源线索（AI 买家发现、产品上下文中获得的联系人）。
 
     商机（opportunities）同样算线索来源，但它代表用户已承诺跟进，不适合承载批量 AI 名单，
     因此 AI 发现单独落这里；打分时两者合并为 CompanyFacts.lead_sources。
@@ -254,7 +254,10 @@ class CompanyLeadSourceORM(Base):
     __tablename__ = "company_lead_sources"
     __table_args__ = (
         UniqueConstraint("product_id", "company_id", "source", name="uq_lead_source"),
-        CheckConstraint("source IN ('ai_discover')", name="ck_lead_source"),
+        CheckConstraint(
+            "source IN ('ai_discover','contact_website','contact_hunter','contact_manual')",
+            name="ck_lead_source",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

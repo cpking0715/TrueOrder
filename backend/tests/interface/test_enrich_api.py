@@ -33,6 +33,12 @@ class Test单公司补全:
         jobs = client.get("/api/jobs", params={"status": "pending"}).json()["items"]
         assert body["job_id"] in {j["id"] for j in jobs}
 
+    def test_带product_id写入任务payload(self, client, company_with_contacts):
+        bare_id, _ = company_with_contacts
+        body = client.post(f"/api/companies/{bare_id}/find-contacts?product_id=5").json()
+        job = client.get(f"/api/jobs/{body['job_id']}").json()
+        assert job["payload"] == {"company_id": bare_id, "product_id": 5}
+
     def test_website方式入队抓取任务(self, client, company_with_contacts):
         bare_id, _ = company_with_contacts
         body = client.post(f"/api/companies/{bare_id}/find-contacts?method=website").json()

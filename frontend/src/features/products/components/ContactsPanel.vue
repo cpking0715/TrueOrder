@@ -12,7 +12,7 @@ import ContactsActions from "./ContactsActions.vue";
 import ContactForm from "./ContactForm.vue";
 import ContactItem from "./ContactItem.vue";
 
-const props = defineProps<{ companyId: number }>();
+const props = defineProps<{ companyId: number; productId?: number }>();
 
 const contacts = ref<Contact[]>([]);
 const error = ref("");
@@ -35,7 +35,7 @@ async function findContacts(method: "finder" | "website") {
   enqueued.value = "";
   busyMethod.value = method;
   try {
-    const { job_id } = await requestFindContacts(props.companyId, method);
+    const { job_id } = await requestFindContacts(props.companyId, method, props.productId);
     enqueued.value = `已加入任务队列（#${job_id}），worker 执行后回到这里查看。`;
   } catch (e) {
     error.value = (e as Error).message;
@@ -46,7 +46,7 @@ async function findContacts(method: "finder" | "website") {
 
 async function handleAdd(payload: Parameters<typeof createContact>[1]) {
   try {
-    await createContact(props.companyId, payload);
+    await createContact(props.companyId, payload, props.productId);
     adding.value = false;
     await reload();
   } catch (e) {
