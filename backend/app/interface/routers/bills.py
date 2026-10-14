@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, Form, HTTPException
 
-from app.core.config import Settings, get_settings
 from app.infrastructure.importers import CsvImporter
 from app.infrastructure.queries import SqlBuyerQueries
-from app.interface.deps import get_buyer_queries, get_importer
+from app.interface.deps import CsvUpload, get_buyer_queries, get_importer, read_csv_upload
 from app.interface.mapping import company_detail_to_out
 from app.interface.schemas import CompanyDetailOut, ImportSummaryOut
 
@@ -18,30 +17,13 @@ router = APIRouter(prefix="/api", tags=["bills", "companies"])
 
 @router.post("/bills/import", response_model=ImportSummaryOut)
 def import_bills_csv(
-    file: UploadFile,
-    request: Request,
+    upload: CsvUpload = Depends(read_csv_upload),
     as_of: date | None = Form(default=None),
     importer: CsvImporter = Depends(get_importer),
-    settings: Settings = Depends(get_settings),
 ):
     """提单 CSV 导入：企业归并 + 去重 + 自动重打分。as_of 缺省用今天。"""
-    limit = settings.max_upload_mb * 1024 * 1024
-    declared = request.headers.get("content-length")
-    if declared is not None and int(declared) > limit:
-        raise HTTPException(
-            status_code=413, detail=f"文件超过上传上限 {settings.max_upload_mb} MB"
-        )
-    data = file.file.read()
-    if len(data) > limit:
-        raise HTTPException(
-            status_code=413, detail=f"文件超过上传上限 {settings.max_upload_mb} MB"
-        )
-    try:
-        csv_text = data.decode("utf-8-sig")
-    except UnicodeDecodeError as exc:
-        raise HTTPException(status_code=422, detail=f"CSV 必须是 UTF-8：{exc}") from exc
     summary, rescores = importer.import_bills(
-        csv_text, source_ref=file.filename or "upload", as_of=as_of
+        upload.text, source_ref=upload.filename, as_of=as_of
     )
     return ImportSummaryOut(**summary.__dict__, rescore=[r.__dict__ for r in rescores])
 
