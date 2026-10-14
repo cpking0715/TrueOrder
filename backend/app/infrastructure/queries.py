@@ -99,6 +99,8 @@ class SqlBuyerQueries:
             stmt = stmt.order_by(
                 CompanyScoreORM.shipments.desc(), CompanyORM.normalized_name.asc()
             )
+        # 唯一兜底排序：分页/分批导出时顺序确定，不重不漏
+        stmt = stmt.order_by(CompanyORM.id.asc())
 
         rows = self._session.execute(stmt.limit(f.limit).offset(f.offset)).all()
         items = [

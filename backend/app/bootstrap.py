@@ -54,10 +54,9 @@ def main(drop: bool = False) -> None:
     database_url = settings.database_url
     if drop:
         # 仅允许样本/本机库：避免误清生产
-        localish = any(
-            h in database_url
-            for h in ("localhost", "127.0.0.1", "@trueorder-pg", "/trueorder")
-        )
+        from sqlalchemy.engine import make_url
+
+        localish = make_url(database_url).host in ("localhost", "127.0.0.1", "::1")
         if not settings.sample_mode or not localish:
             raise SystemExit(
                 "--drop 已拒绝：仅当 TRUEORDER_SAMPLE_MODE=true 且数据库像是本机/样本库时可用"

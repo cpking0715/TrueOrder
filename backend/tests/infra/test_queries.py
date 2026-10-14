@@ -85,3 +85,29 @@ class Test并发建产品:
             select(ProductORM.code).where(ProductORM.id.in_([id_a, id_b]))
         ).all()
         assert len(set(codes)) == 2
+
+
+class Test分批导出:
+    def test_同票数多公司分批遍历不重不漏(self, session):
+        from sqlalchemy import select
+
+        from app.infrastructure.orm import ProductORM
+        from app.infrastructure.queries import BuyerQueryFilters
+
+        rows = "\n".join(
+            f"2026-05-0{i},BOL-X{i},ACME {chr(64 + i)} INC,\"1 ST, NY, USA\",US,"
+            f"HANGZHOU GARMENT CO LTD,\"NO 66 RD, HANGZHOU, CN\",CN,CHINA,620462,"
+            f"WOMENS COTTON TROUSERS,NEW YORK,100"
+            for i in range(1, 8)
+        )
+        importer = CsvImporter(session)
+        importer.import_products(PRODUCTS_CSV)
+        importer.import_bills(BILLS_CSV.splitlines()[0] + "\n" + rows + "\n", as_of=AS_OF)
+        pid = session.scalar(select(ProductORM.id))
+        queries = SqlBuyerQueries(session)
+        for order in ("shipments", "last_arrival", "name"):
+            f = BuyerQueryFilters(product_id=pid, audience="importer", order=order, limit=10**5)
+            _, total = queries.query_buyers(f)
+            ids = [b.company_id for b in queries.iter_buyers(f, batch_size=2)]
+            assert total >= 7
+            assert len(ids) == len(set(ids)) == total, order
