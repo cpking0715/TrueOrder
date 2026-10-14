@@ -9,6 +9,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from app.infrastructure.orm import Base
+from app.interface.auth import require_api_token
 from app.interface.deps import get_session
 from app.interface.main import create_app
 
@@ -40,6 +41,7 @@ def client(engine: Engine) -> TestClient:
 
     app = create_app()
     app.dependency_overrides[get_session] = override_get_session
+    app.dependency_overrides[require_api_token] = lambda: None
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
