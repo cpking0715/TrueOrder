@@ -58,11 +58,7 @@ packages = ["app"]
 # 先对 domain 开严格；其余层逐步收紧（见 PR 说明）
 [[tool.mypy.overrides]]
 module = "app.domain.*"
-disallow_untyped_defs = true
-warn_return_any = true
-no_implicit_optional = true
-# 本 PR 先把门禁立起来；下列码在后续 PR 收紧（见 PR 正文剩余工作）
-disable_error_code = ["type-arg", "no-any-return", "arg-type", "unused-ignore", "no-untyped-def"]
+strict = true
 
 
 [[tool.mypy.overrides]]

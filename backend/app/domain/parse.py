@@ -6,8 +6,9 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime
+from typing import Any
 
 from app.domain.entities import Audience, BillLine, BuyerType, HsAssignment, ProductConfig
 from app.domain.normalize import is_valid_hs, normalize_company_name, normalize_country
@@ -18,7 +19,7 @@ _BUYER_TYPES: tuple[BuyerType, ...] = ("importer", "factory", "both")
 _AUDIENCES: tuple[Audience, ...] = ("importer", "factory")
 
 
-def _cell(row: dict, *names: str) -> str:
+def _cell(row: Mapping[str, Any], *names: str) -> str:
     """按候选列名取值（去 BOM/空白），缺失返回空串。"""
     for name in names:
         for key, value in row.items():
@@ -29,7 +30,9 @@ def _cell(row: dict, *names: str) -> str:
     return ""
 
 
-def parse_bill_row(row: dict, source: str, line_no: int) -> tuple[BillLine | None, str | None]:
+def parse_bill_row(
+    row: Mapping[str, Any], source: str, line_no: int
+) -> tuple[BillLine | None, str | None]:
     """解析提单一行。返回 (BillLine, None) 或 (None, 错误描述)。"""
     raw_date = _cell(row, "arrival_date", "date", "arrival")
     arrival = None
@@ -88,10 +91,12 @@ def _squash_desc(text: str) -> str:
     return " ".join((text or "").upper().split())
 
 
-def parse_product_rows(rows: list[dict], source: str) -> tuple[list[ProductConfig], list[str]]:
+def parse_product_rows(
+    rows: Sequence[Mapping[str, Any]], source: str
+) -> tuple[list[ProductConfig], list[str]]:
     """产品目录多行（一个产品可多行税号）→ ProductConfig 列表（product_id 未定，置 0）。"""
     errors: list[str] = []
-    grouped: dict[str, dict] = {}
+    grouped: dict[str, dict[str, Any]] = {}
     for line_no, row in enumerate(rows, start=2):  # 第 1 行是表头
         code = _cell(row, "code", "product_code")
         name = _cell(row, "name", "product_name")
@@ -207,7 +212,7 @@ def build_quick_product(
         return None, f"buyer_type 必须是 importer/factory/both，得到 {buyer_type!r}"
 
     audiences: tuple[Audience, ...] = (
-        ("importer", "factory") if buyer_type == "both" else (buyer_type,)  # type: ignore[arg-type]
+        ("importer", "factory") if buyer_type == "both" else (buyer_type,)
     )
     user_buyer = tuple(dict.fromkeys(kw.strip().upper() for kw in buyer_keywords if kw.strip()))
     user_peer = tuple(dict.fromkeys(kw.strip().upper() for kw in peer_keywords if kw.strip()))
@@ -215,9 +220,9 @@ def build_quick_product(
         product_id=0,
         code=code,
         name=name,
-        buyer_type=buyer_type,  # type: ignore[arg-type]
+        buyer_type=buyer_type,
         hs_assignments=tuple(HsAssignment(hs_code=hs, audience=a) for a in audiences),
-        buyer_keywords=user_buyer or suggest_buyer_keywords(buyer_type),  # type: ignore[arg-type]
+        buyer_keywords=user_buyer or suggest_buyer_keywords(buyer_type),
         peer_keywords=user_peer,
         description=(description or "").strip(),
     )

@@ -22,7 +22,7 @@ _DISCOVER_PROMPT = (
 )
 
 
-def build_discover_messages(category: str, hs_code: str = "") -> list[dict]:
+def build_discover_messages(category: str, hs_code: str = "") -> list[dict[str, str]]:
     return [
         {
             "role": "user",

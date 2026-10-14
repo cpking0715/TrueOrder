@@ -14,8 +14,12 @@ JobStatus = Literal["pending", "running", "done", "failed"]
 # 任务种类：第一期实际产生 find_contacts / crawl_website / verify_email（配 Hunter Key 时）；
 # send_email / poll_imap 为第二期预留（见 DEV-SPEC 3.2）。
 JobKind = Literal[
-    "send_email", "find_contacts", "crawl_website", "poll_imap",
-    "verify_email", "discover_buyers",
+    "send_email",
+    "find_contacts",
+    "crawl_website",
+    "poll_imap",
+    "verify_email",
+    "discover_buyers",
 ]
 
 DEAD_TASK_TIMEOUT = timedelta(minutes=10)
@@ -43,7 +47,8 @@ def next_run_after(attempts: int, now: datetime) -> datetime:
     """第 n 次失败后的重跑时间：60s * 2^(n-1)，封顶 1 小时。"""
     n = max(attempts, 1)
     delay = min(BACKOFF_BASE * (2 ** (n - 1)), BACKOFF_CAP)
-    return now + delay
+    result: datetime = now + delay
+    return result
 
 
 def is_dead(locked_at: datetime | None, now: datetime) -> bool:
