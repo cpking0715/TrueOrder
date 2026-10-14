@@ -70,6 +70,15 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
+  compose-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # 必填变量缺失必须报错；补齐后配置可解析
+      - run: cp .env.example .env
+      - run: "! docker compose config -q 2>/dev/null"
+      - run: POSTGRES_PASSWORD=ci-dummy TRUEORDER_API_TOKEN=ci-dummy docker compose config -q
+
   schema-consistency:
     runs-on: ubuntu-latest
     needs: [backend, frontend]

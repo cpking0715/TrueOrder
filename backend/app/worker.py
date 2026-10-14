@@ -9,10 +9,12 @@ send_email / import_csv 在 build_handlers 另行注册。
 from __future__ import annotations
 
 import argparse
+import os
 import signal
 import threading
-from collections.abc import Callable
+import time
 from datetime import UTC, datetime
+from pathlib import Path
 
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -38,20 +40,44 @@ def build_handlers() -> dict[str, Handler]:
     return registry
 
 
+# 秒：心跳在每轮与每个任务之间刷新；超过即视为卡死（单任务执行时间应远小于此）
+HEARTBEAT_MAX_AGE = 300.0
+
+
+def touch_heartbeat(path: str | None) -> None:
+    if path:
+        Path(path).touch()
+
+
+def heartbeat_ok(path: str, max_age: float = HEARTBEAT_MAX_AGE, now: float | None = None) -> bool:
+    """容器健康检查：心跳文件存在且足够新。"""
+    try:
+        mtime = Path(path).stat().st_mtime
+    except FileNotFoundError:
+        return False
+    return ((now if now is not None else time.time()) - mtime) <= max_age
+
+
 def run_loop(
     factory: sessionmaker[Session],
-    handlers: dict[str, Callable[[Session, dict], None]],
+    handlers: dict[str, Handler],
     interval: float = 2.0,
     once: bool = False,
     stop: threading.Event | None = None,
+    heartbeat: str | None = None,
 ) -> None:
     """轮询循环；stop 被置位后在当前任务结束时退出（不打断执行中的任务）。"""
     stop = stop or threading.Event()
     while not stop.is_set():
+        touch_heartbeat(heartbeat)
         session = factory()
         try:
             worker = Worker(SqlJobQueue(session), handlers)
-            worker.run_once(datetime.now(UTC), should_stop=stop.is_set)
+            def should_stop() -> bool:
+                touch_heartbeat(heartbeat)
+                return stop.is_set()
+
+            worker.run_once(datetime.now(UTC), should_stop=should_stop)
         finally:
             session.close()
         if once:
@@ -74,7 +100,17 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="TrueOrder 后台任务 worker")
     parser.add_argument("--once", action="store_true", help="只跑一轮即退出（调试用）")
     parser.add_argument("--interval", type=float, default=2.0, help="轮询间隔秒数")
+    parser.add_argument(
+        "--heartbeat-file",
+        default=os.environ.get("TRUEORDER_WORKER_HEARTBEAT"),
+        help="心跳文件路径（容器健康检查用；默认读 TRUEORDER_WORKER_HEARTBEAT）",
+    )
+    parser.add_argument(
+        "--check-heartbeat", action="store_true", help="只检查心跳是否新鲜（退出码 0/1）"
+    )
     args = parser.parse_args()
+    if args.check_heartbeat:
+        raise SystemExit(0 if args.heartbeat_file and heartbeat_ok(args.heartbeat_file) else 1)
 
     configure_logging()
     require_configured_database()
@@ -84,7 +120,14 @@ def main() -> None:
     stop = threading.Event()
     install_signal_handlers(stop)
     log.info("worker 启动", extra={"handlers": sorted(handlers), "interval": args.interval})
-    run_loop(factory, handlers, interval=args.interval, once=args.once, stop=stop)
+    run_loop(
+        factory,
+        handlers,
+        interval=args.interval,
+        once=args.once,
+        stop=stop,
+        heartbeat=args.heartbeat_file,
+    )
     log.info("worker 已停止")
 
 

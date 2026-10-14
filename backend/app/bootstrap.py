@@ -1,6 +1,7 @@
-"""启动前初始化：迁移到 head + 导入示例产品与非全量提单样本。幂等，可重复执行。
+"""启动前初始化：迁移到 head；样本模式下再导入示例产品与非全量提单样本。幂等，可重复执行。
 
-用法：uv run python -m app.bootstrap [--drop]
+用法：uv run python -m app.bootstrap [--drop] [--schema-only]
+非样本模式（TRUEORDER_SAMPLE_MODE=false，如生产 compose）只迁移，不写入示例数据。
 """
 
 from __future__ import annotations
@@ -49,7 +50,7 @@ def _ensure_schema(database_url: str) -> None:
     print("schema 已就绪（alembic head）")
 
 
-def main(drop: bool = False) -> None:
+def main(drop: bool = False, schema_only: bool = False) -> None:
     settings = get_settings()
     database_url = settings.database_url
     if drop:
@@ -68,6 +69,9 @@ def main(drop: bool = False) -> None:
         engine.dispose()
         print("已删除全部表（--drop）")
     _ensure_schema(database_url)
+    if schema_only or not settings.sample_mode:
+        print("仅迁移：非样本模式或 --schema-only，不导入示例数据")
+        return
 
     products_csv = (SEED_DIR / "products.csv").read_text(encoding="utf-8-sig")
     bills_csv = (SEED_DIR / "sample_bills.csv").read_text(encoding="utf-8-sig")
@@ -102,5 +106,6 @@ def main(drop: bool = False) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="TrueOrder 初始化")
     parser.add_argument("--drop", action="store_true", help="先删除全部表再重建")
+    parser.add_argument("--schema-only", action="store_true", help="只迁移，不导入示例数据")
     args = parser.parse_args()
-    main(drop=args.drop)
+    main(drop=args.drop, schema_only=args.schema_only)

@@ -1,54 +1,78 @@
-# 本地/演示一键起：Postgres + API + worker
-# 用法：复制 .env.example 为 .env 后 docker compose up --build
+# 生产式一键起：Postgres + API + worker
+# 用法：cp .env.example .env，填好 POSTGRES_PASSWORD 与 TRUEORDER_API_TOKEN 后 docker compose up -d --build
+# 必填变量缺失时 compose 直接报错退出（不提供默认口令）。
+x-app-env: &app-env
+  TRUEORDER_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-trueorder}:${POSTGRES_PASSWORD:?请在 .env 设置 POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-trueorder}
+  TRUEORDER_SAMPLE_MODE: "false"
+  TRUEORDER_API_TOKEN: ${TRUEORDER_API_TOKEN:?请在 .env 设置 TRUEORDER_API_TOKEN（生产必须开启鉴权）}
+
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: trueorder
-      POSTGRES_PASSWORD: trueorder
-      POSTGRES_DB: trueorder
+      POSTGRES_USER: ${POSTGRES_USER:-trueorder}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 设置 POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-trueorder}
+    # 只绑本机回环：外部不可直连数据库；需要远程运维请走 SSH 隧道
     ports:
-      - "5433:5432"
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U trueorder"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 5s
       timeout: 5s
       retries: 10
     volumes:
       - trueorder_pg:/var/lib/postgresql/data
 
-  api:
+  # 一次性迁移：只跑 alembic（非样本模式不导入示例数据），成功后 api/worker 才启动
+  migrate:
     build: .
+    restart: "no"
     depends_on:
       db:
         condition: service_healthy
     env_file: .env
-    environment:
-      TRUEORDER_DATABASE_URL: postgresql+psycopg://trueorder:trueorder@db:5432/trueorder
-      TRUEORDER_SAMPLE_MODE: "false"
-    ports:
-      - "8000:8000"
-    command: >
-      sh -c "uv run python -m app.bootstrap &&
-             uv run uvicorn app.interface.main:app --host 0.0.0.0 --port 8000"
+    environment: *app-env
+    command: ["python", "-m", "app.bootstrap", "--schema-only"]
     healthcheck:
-      test: ["CMD", "uv", "run", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
-      interval: 10s
+      disable: true
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    env_file: .env
+    environment: *app-env
+    ports:
+      - "${TRUEORDER_HTTP_PORT:-8000}:8000"
+    healthcheck:
+      # GET /healthz：进程存活 + 数据库连通
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4).status == 200 else 1)"]
+      interval: 15s
       timeout: 5s
-      retries: 10
+      start_period: 20s
+      retries: 5
 
   worker:
     build: .
+    restart: unless-stopped
     depends_on:
-      db:
-        condition: service_healthy
-      api:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     env_file: .env
     environment:
-      TRUEORDER_DATABASE_URL: postgresql+psycopg://trueorder:trueorder@db:5432/trueorder
-      TRUEORDER_SAMPLE_MODE: "false"
-    command: ["uv", "run", "python", "-m", "app.worker", "--interval", "2"]
+      <<: *app-env
+      TRUEORDER_WORKER_HEARTBEAT: /app/run/worker.heartbeat
+    command: ["python", "-m", "app.worker", "--interval", "2"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.worker", "--check-heartbeat"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
     stop_grace_period: 60s
 
 volumes:
