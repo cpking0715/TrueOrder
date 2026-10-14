@@ -7,17 +7,23 @@ import io
 from collections.abc import Iterator
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.core.config import Settings, get_settings
 from app.domain.parse import build_quick_product
 from app.infrastructure.importers import CsvImporter
 from app.infrastructure.queries import BuyerQueryFilters, SqlBuyerQueries
 from app.infrastructure.repositories import SqlProductRepository
 from app.interface.csv_safety import sanitize_csv_cell
-from app.interface.deps import get_buyer_queries, get_importer, get_product_repository, get_session
+from app.interface.deps import (
+    CsvUpload,
+    get_buyer_queries,
+    get_importer,
+    get_product_repository,
+    get_session,
+    read_csv_upload,
+)
 from app.interface.mapping import buyer_to_out, product_row_to_out
 from app.interface.schemas import (
     BuyerListOut,
@@ -201,28 +207,11 @@ def export_buyers(
 
 @router.post("/import", response_model=ImportSummaryOut)
 def import_products_csv(
-    file: UploadFile,
-    request: Request,
+    upload: CsvUpload = Depends(read_csv_upload),
     importer: CsvImporter = Depends(get_importer),
-    settings: Settings = Depends(get_settings),
 ):
     """产品目录 CSV 导入：每行一个产品 + 税号 + 买家类型，多行税号自动合并。"""
-    limit = settings.max_upload_mb * 1024 * 1024
-    declared = request.headers.get("content-length")
-    if declared is not None and int(declared) > limit:
-        raise HTTPException(
-            status_code=413, detail=f"文件超过上传上限 {settings.max_upload_mb} MB"
-        )
-    data = file.file.read()
-    if len(data) > limit:
-        raise HTTPException(
-            status_code=413, detail=f"文件超过上传上限 {settings.max_upload_mb} MB"
-        )
-    try:
-        csv_text = data.decode("utf-8-sig")
-    except UnicodeDecodeError as exc:
-        raise HTTPException(status_code=422, detail=f"CSV 必须是 UTF-8：{exc}") from exc
-    summary = importer.import_products(csv_text, source=file.filename or "upload")
+    summary = importer.import_products(upload.text, source=upload.filename)
     # 产品目录变化可能影响既有得分（关键词），导入后重打分
     rescores = importer.rescore(date.today())
     return ImportSummaryOut(**summary.__dict__, rescore=[r.__dict__ for r in rescores])

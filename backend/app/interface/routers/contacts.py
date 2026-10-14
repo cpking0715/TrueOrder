@@ -6,14 +6,13 @@ import csv
 import io
 from collections.abc import Iterator
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
-from app.core.config import Settings, get_settings
 from app.infrastructure.contact_repository import SqlContactRepository
 from app.infrastructure.queries import BuyerQueryFilters, SqlBuyerQueries
 from app.interface.csv_safety import sanitize_csv_cell
-from app.interface.deps import get_buyer_queries, get_contact_repository
+from app.interface.deps import CsvUpload, get_buyer_queries, get_contact_repository, read_csv_upload
 from app.interface.schemas import (
     CompanyPatchIn,
     CompanyWebsiteOut,
@@ -130,28 +129,11 @@ def patch_company(
 
 @router.post("/contacts/import", response_model=ContactsImportOut)
 def import_contacts_csv(
-    file: UploadFile,
-    request: Request,
+    upload: CsvUpload = Depends(read_csv_upload),
     repo: SqlContactRepository = Depends(get_contact_repository),
-    settings: Settings = Depends(get_settings),
 ):
     """联系人 CSV 导入：company_id 或「企业名+国家」定位企业，name/title/email/phone。"""
-    limit = settings.max_upload_mb * 1024 * 1024
-    declared = request.headers.get("content-length")
-    if declared is not None and int(declared) > limit:
-        raise HTTPException(
-            status_code=413, detail=f"文件超过上传上限 {settings.max_upload_mb} MB"
-        )
-    data = file.file.read()
-    if len(data) > limit:
-        raise HTTPException(
-            status_code=413, detail=f"文件超过上传上限 {settings.max_upload_mb} MB"
-        )
-    try:
-        csv_text = data.decode("utf-8-sig")
-    except UnicodeDecodeError as exc:
-        raise HTTPException(status_code=422, detail=f"CSV 必须是 UTF-8：{exc}") from exc
-    summary = repo.import_csv(csv_text, source_ref=file.filename or "upload")
+    summary = repo.import_csv(upload.text, source_ref=upload.filename)
     return ContactsImportOut(
         added=summary.added,
         duplicates=summary.duplicates,
