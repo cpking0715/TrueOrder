@@ -24,5 +24,30 @@ export const router = createRouter({
       name: "pipeline",
       component: () => import("@/features/pipeline/views/PipelineView.vue"),
     },
+    {
+      path: "/kit",
+      name: "kit-today",
+      component: () => import("@/features/kit/views/KitTodayView.vue"),
+    },
+    {
+      path: "/kit/products",
+      name: "kit-products",
+      component: () => import("@/features/kit/views/KitProductsView.vue"),
+    },
+    {
+      path: "/kit/buyers",
+      name: "kit-buyers",
+      component: () => import("@/features/kit/views/KitBuyersView.vue"),
+    },
+    {
+      path: "/kit/drafts",
+      name: "kit-drafts",
+      component: () => import("@/features/kit/views/KitDraftsView.vue"),
+    },
+    {
+      path: "/kit/inquiries",
+      name: "kit-inquiries",
+      component: () => import("@/features/kit/views/KitInquiriesView.vue"),
+    },
   ],
 });
