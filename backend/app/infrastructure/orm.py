@@ -435,3 +435,7 @@ class SuppressionORM(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+# 出海包扩展表：导入以注册到 Base.metadata（放末尾避免循环导入）
+from app.infrastructure import orm_kit as _orm_kit  # noqa: E402,F401
