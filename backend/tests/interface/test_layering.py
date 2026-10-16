@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+_ORM_MODULES = ("app.infrastructure.orm", "app.infrastructure.orm_kit", "sqlalchemy")
 INTERFACE = Path(__file__).resolve().parents[2] / "app" / "interface"
 
 
@@ -16,7 +17,7 @@ def test_接口层不导入orm(path: Path) -> None:
     bad = []
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module:
-            if node.module == "app.infrastructure.orm" or node.module == "sqlalchemy":
+            if node.module in _ORM_MODULES:
                 names = {a.name for a in node.names}
                 if node.module == "sqlalchemy" and names <= {"text"}:
                     continue

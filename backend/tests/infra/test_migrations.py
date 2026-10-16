@@ -109,6 +109,10 @@ class Test迁移:
         engine = create_engine(MIG_URL)
         Base.metadata.create_all(engine)
         with engine.begin() as conn:  # 剥掉 WP1/WP3 新增对象 = 模拟历史版本的库
+            # 出海包扩展表比 WP5 更新：模拟旧库时先删
+            for kit_table in ("kit_drafts", "kit_inquiries", "kit_buyer_tags",
+                              "kit_product_profiles", "kit_task_progress"):
+                conn.execute(text(f"DROP TABLE {kit_table}"))
             conn.execute(text("DROP TABLE email_messages"))
             conn.execute(text("DROP TABLE email_templates"))
             conn.execute(text("DROP TABLE suppressions"))
@@ -152,6 +156,10 @@ class Test旧库接管:
         Base.metadata.create_all(engine)
         with engine.begin() as conn:
             # 剥掉 WP1/WP3 新增对象与表达式索引 = 模拟迁移前的历史库
+            # 出海包扩展表比 WP5 更新：模拟旧库时先删
+            for kit_table in ("kit_drafts", "kit_inquiries", "kit_buyer_tags",
+                              "kit_product_profiles", "kit_task_progress"):
+                conn.execute(text(f"DROP TABLE {kit_table}"))
             conn.execute(text("DROP TABLE email_messages"))
             conn.execute(text("DROP TABLE email_templates"))
             conn.execute(text("DROP TABLE suppressions"))

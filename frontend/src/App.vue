@@ -103,6 +103,30 @@ import { RouterLink, RouterView } from "vue-router";
         </svg>
         <span>任务</span>
       </RouterLink>
+      <RouterLink
+        to="/kit"
+        class="nav-item"
+        active-class="active"
+      >
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 20 20"
+          fill="none"
+        >
+          <path
+            d="M3 14L10 4L17 14H3Z"
+            stroke="currentColor"
+            stroke-width="1.5"
+          />
+          <path
+            d="M2 17H18"
+            stroke="currentColor"
+            stroke-width="1.5"
+          />
+        </svg>
+        <span>出海包</span>
+      </RouterLink>
     </nav>
     <main class="page">
       <RouterView />

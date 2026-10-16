@@ -23,6 +23,8 @@ from app.interface.routers import (
     enrich,
     hs,
     jobs,
+    kit,
+    kit_sales,
     meta,
     opportunities,
     outreach,
@@ -60,6 +62,8 @@ def create_app() -> FastAPI:
     app.include_router(opportunities.router, dependencies=protected)
     app.include_router(hs.router, dependencies=protected)
     app.include_router(outreach.router, dependencies=protected)
+    app.include_router(kit.router, dependencies=protected)
+    app.include_router(kit_sales.router, dependencies=protected)
 
 
     @app.get("/healthz", include_in_schema=False)
