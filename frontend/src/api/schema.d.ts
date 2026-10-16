@@ -626,6 +626,215 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/kit/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Tasks */
+        get: operations["list_tasks_api_kit_tasks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/kit/tasks/{task_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set Task Done */
+        put: operations["set_task_done_api_kit_tasks__task_key__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/kit/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Profiles */
+        get: operations["list_profiles_api_kit_products_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/kit/products/{product_id}/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save Profile */
+        put: operations["save_profile_api_kit_products__product_id__profile_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/kit/buyers/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Buyers
+         * @description 同步导入（50–100 行量级）；只入库与打标签，不触发任何补全或发送。
+         */
+        post: operations["import_buyers_api_kit_buyers_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/kit/buyers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Buyers */
+        get: operations["list_buyers_api_kit_buyers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/kit/buyers/{company_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Buyer */
+        patch: operations["patch_buyer_api_kit_buyers__company_id__patch"];
+        trace?: never;
+    };
+    "/api/kit/drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Drafts */
+        get: operations["list_drafts_api_kit_drafts_get"];
+        put?: never;
+        /** Create Draft */
+        post: operations["create_draft_api_kit_drafts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/kit/drafts/{draft_id}/export.txt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Draft */
+        get: operations["export_draft_api_kit_drafts__draft_id__export_txt_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/kit/inquiries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Inquiries */
+        get: operations["list_inquiries_api_kit_inquiries_get"];
+        put?: never;
+        /** Create Inquiry */
+        post: operations["create_inquiry_api_kit_inquiries_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/kit/inquiries/{inquiry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Inquiry */
+        patch: operations["update_inquiry_api_kit_inquiries__inquiry_id__patch"];
+        trace?: never;
+    };
+    "/api/kit/inquiries/{inquiry_id}/pi.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Pi */
+        get: operations["export_pi_api_kit_inquiries__inquiry_id__pi_pdf_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -672,6 +881,11 @@ export interface components {
         Body_import_bills_csv_api_bills_import_post: {
             /** As Of */
             as_of?: string | null;
+            /** File */
+            file: string;
+        };
+        /** Body_import_buyers_api_kit_buyers_import_post */
+        Body_import_buyers_api_kit_buyers_import_post: {
             /** File */
             file: string;
         };
@@ -1090,6 +1304,254 @@ export interface components {
             items: components["schemas"]["JobOut"][];
             /** Total */
             total: number;
+        };
+        /** KitBuyerImportOut */
+        KitBuyerImportOut: {
+            /** Rows Valid */
+            rows_valid: number;
+            /** Companies Created */
+            companies_created: number;
+            /** Buyers Tagged */
+            buyers_tagged: number;
+            /** Already In Library */
+            already_in_library: number;
+            /** Contacts Added */
+            contacts_added: number;
+            /** Duplicates In File */
+            duplicates_in_file: number;
+            /** Errors */
+            errors: string[];
+        };
+        /** KitBuyerOut */
+        KitBuyerOut: {
+            /** Company Id */
+            company_id: number;
+            /** Name */
+            name: string;
+            /** Country */
+            country: string;
+            /** Channel */
+            channel: string;
+            /** Stage */
+            stage: string;
+            /** Contact Id */
+            contact_id: number | null;
+            /** Contact Name */
+            contact_name: string;
+            /** Email */
+            email: string | null;
+        };
+        /** KitBuyerPatchIn */
+        KitBuyerPatchIn: {
+            /** Channel */
+            channel?: string | null;
+            /** Stage */
+            stage?: string | null;
+        };
+        /** KitDraftIn */
+        KitDraftIn: {
+            /** Product Id */
+            product_id: number;
+            /** Company Id */
+            company_id: number;
+            /** Contact Id */
+            contact_id?: number | null;
+            /**
+             * Channel
+             * @default email
+             * @enum {string}
+             */
+            channel: "email" | "whatsapp";
+        };
+        /** KitDraftOut */
+        KitDraftOut: {
+            /** Id */
+            id: number;
+            /** Product Id */
+            product_id: number;
+            /** Company Id */
+            company_id: number;
+            /** Company Name */
+            company_name: string;
+            /** Contact Id */
+            contact_id: number | null;
+            /** Channel */
+            channel: string;
+            /** Subject */
+            subject: string;
+            /** Body */
+            body: string;
+            /** Source */
+            source: string;
+            /** Follow Up On */
+            follow_up_on: string[];
+            /** Next Follow Up */
+            next_follow_up: string | null;
+            /**
+             * Sent
+             * @description 恒为 false：出海包只生成草稿，从不发送
+             * @default false
+             */
+            sent: boolean;
+        };
+        /** KitInquiryIn */
+        KitInquiryIn: {
+            /** Company Id */
+            company_id: number;
+            /** Product Id */
+            product_id: number;
+            /** Quantity */
+            quantity: number;
+            /** Unit Price */
+            unit_price: number | string;
+            /**
+             * Currency
+             * @default USD
+             */
+            currency: string;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+        };
+        /** KitInquiryOut */
+        KitInquiryOut: {
+            /** Id */
+            id: number;
+            /** Company Id */
+            company_id: number;
+            /** Company Name */
+            company_name: string;
+            /** Product Id */
+            product_id: number;
+            /** Product Name */
+            product_name: string;
+            /** Status */
+            status: string;
+            /** Status Label */
+            status_label: string;
+            /** Quantity */
+            quantity: number;
+            /** Unit Price */
+            unit_price: string;
+            /** Currency */
+            currency: string;
+            /** Total */
+            total: string;
+            /** Note */
+            note: string;
+        };
+        /** KitInquiryPatchIn */
+        KitInquiryPatchIn: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "new" | "quoted" | "sample" | "won" | "lost";
+        };
+        /** KitProfileIn */
+        KitProfileIn: {
+            /**
+             * Image Url
+             * @default
+             */
+            image_url: string;
+            /**
+             * Specs
+             * @default
+             */
+            specs: string;
+            /**
+             * Moq
+             * @default 1
+             */
+            moq: number;
+            /**
+             * Lead Time Days
+             * @default 30
+             */
+            lead_time_days: number;
+            /**
+             * Selling Points
+             * @default []
+             */
+            selling_points: string[];
+            /**
+             * Featured
+             * @default true
+             */
+            featured: boolean;
+        };
+        /** KitProfileOut */
+        KitProfileOut: {
+            /** Product Id */
+            product_id: number;
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Has Profile */
+            has_profile: boolean;
+            /**
+             * Image Url
+             * @default
+             */
+            image_url: string;
+            /**
+             * Specs
+             * @default
+             */
+            specs: string;
+            /**
+             * Moq
+             * @default 0
+             */
+            moq: number;
+            /**
+             * Lead Time Days
+             * @default 0
+             */
+            lead_time_days: number;
+            /**
+             * Selling Points
+             * @default []
+             */
+            selling_points: string[];
+            /**
+             * Featured
+             * @default false
+             */
+            featured: boolean;
+        };
+        /** KitTaskDoneIn */
+        KitTaskDoneIn: {
+            /** Done */
+            done: boolean;
+        };
+        /** KitTaskOut */
+        KitTaskOut: {
+            /** Key */
+            key: string;
+            /** Day */
+            day: number;
+            /** Title */
+            title: string;
+            /** Page */
+            page: string;
+            /** Done */
+            done: boolean;
+        };
+        /** KitTasksOut */
+        KitTasksOut: {
+            /** Today */
+            today: number;
+            /** Done Count */
+            done_count: number;
+            /** Total */
+            total: number;
+            /** Tasks */
+            tasks: components["schemas"]["KitTaskOut"][];
         };
         /** MessageOut */
         MessageOut: {
@@ -2564,6 +3026,416 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tasks_api_kit_tasks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KitTasksOut"];
+                };
+            };
+        };
+    };
+    set_task_done_api_kit_tasks__task_key__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KitTaskDoneIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_profiles_api_kit_products_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KitProfileOut"][];
+                };
+            };
+        };
+    };
+    save_profile_api_kit_products__product_id__profile_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KitProfileIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KitProfileOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_buyers_api_kit_buyers_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_import_buyers_api_kit_buyers_import_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KitBuyerImportOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_buyers_api_kit_buyers_get: {
+        parameters: {
+            query?: {
+                country?: string;
+                channel?: string;
+                stage?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KitBuyerOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_buyer_api_kit_buyers__company_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KitBuyerPatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_drafts_api_kit_drafts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KitDraftOut"][];
+                };
+            };
+        };
+    };
+    create_draft_api_kit_drafts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KitDraftIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KitDraftOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_draft_api_kit_drafts__draft_id__export_txt_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_inquiries_api_kit_inquiries_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KitInquiryOut"][];
+                };
+            };
+        };
+    };
+    create_inquiry_api_kit_inquiries_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KitInquiryIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KitInquiryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_inquiry_api_kit_inquiries__inquiry_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                inquiry_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KitInquiryPatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KitInquiryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_pi_api_kit_inquiries__inquiry_id__pi_pdf_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                inquiry_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
             };
             /** @description Validation Error */
             422: {

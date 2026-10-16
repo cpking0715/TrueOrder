@@ -23,10 +23,27 @@ from app.infrastructure.orm_kit import (
 
 @dataclass(frozen=True)
 class ProfileRow:
+    """产品 + 档案（纯值）；has_profile=False 时其余档案字段为默认值。"""
+
     product_id: int
     code: str
     name: str
-    profile: KitProductProfileORM | None
+    has_profile: bool = False
+    image_url: str = ""
+    specs: str = ""
+    moq: int = 0
+    lead_time_days: int = 0
+    selling_points: tuple[str, ...] = ()
+    featured: bool = False
+
+
+def _profile_row(p: ProductORM, prof: KitProductProfileORM | None) -> ProfileRow:
+    if prof is None:
+        return ProfileRow(p.id, p.code, p.name)
+    return ProfileRow(
+        p.id, p.code, p.name, True, prof.image_url, prof.specs, prof.moq,
+        prof.lead_time_days, tuple(prof.selling_points or []), prof.featured,
+    )
 
 
 @dataclass
@@ -82,7 +99,7 @@ class SqlKitRepository:
             .outerjoin(KitProductProfileORM, KitProductProfileORM.product_id == ProductORM.id)
             .order_by(ProductORM.id)
         )
-        return [ProfileRow(p.id, p.code, p.name, prof) for p, prof in self._session.execute(stmt)]
+        return [_profile_row(p, prof) for p, prof in self._session.execute(stmt)]
 
     def product_exists(self, product_id: int) -> bool:
         return self._session.get(ProductORM, product_id) is not None
@@ -93,11 +110,12 @@ class SqlKitRepository:
         )
         return int(self._session.scalar(stmt) or 0)
 
-    def get_profile(self, product_id: int) -> KitProductProfileORM | None:
-        return self._session.get(KitProductProfileORM, product_id)
+    def is_featured(self, product_id: int) -> bool:
+        prof = self._session.get(KitProductProfileORM, product_id)
+        return bool(prof and prof.featured)
 
     def upsert_profile(self, product_id: int, p: ProductProfileInput) -> None:
-        row = self.get_profile(product_id)
+        row = self._session.get(KitProductProfileORM, product_id)
         if row is None:
             row = KitProductProfileORM(product_id=product_id)
             self._session.add(row)

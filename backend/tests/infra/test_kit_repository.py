@@ -41,7 +41,7 @@ def test_产品档案_upsert_与主推计数(session):
     repo.upsert_profile(pid, prof)
     assert repo.featured_count() == 1
     row = repo.list_profiles()[0]
-    assert row.profile is not None and row.profile.selling_points == ["GOTS"]
+    assert row.has_profile and row.selling_points == ("GOTS",)
 
 
 def test_导入50买家_去重_非法邮箱_二次导入0新增(session):

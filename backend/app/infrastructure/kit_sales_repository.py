@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
 from typing import Any
 
@@ -16,10 +17,41 @@ from app.infrastructure.orm_kit import KitDraftORM, KitInquiryORM, KitProductPro
 
 @dataclass(frozen=True)
 class DraftParts:
-    product: ProductORM
-    profile: KitProductProfileORM | None
-    company: CompanyORM
-    contact: ContactORM | None
+    """生成草稿所需的素材（纯值，接口层不接触 ORM）。profile_* 为 None 表示未建档案。"""
+
+    product_name: str
+    has_profile: bool
+    specs: str
+    moq: int
+    lead_time_days: int
+    selling_points: tuple[str, ...]
+    company_name: str
+    country: str
+    contact_name: str
+    contact_email: str | None
+    do_not_contact: bool
+
+
+@dataclass(frozen=True)
+class DraftRow:
+    id: int
+    product_id: int
+    company_id: int
+    company_name: str
+    contact_id: int | None
+    channel: str
+    subject: str
+    body: str
+    source: str
+    follow_up_on: list[date]
+
+
+def _draft_row(d: KitDraftORM, company_name: str) -> DraftRow:
+    return DraftRow(
+        id=d.id, product_id=d.product_id, company_id=d.company_id, company_name=company_name,
+        contact_id=d.contact_id, channel=d.channel, subject=d.subject, body=d.body,
+        source=d.source, follow_up_on=list(d.follow_up_on or []),
+    )
 
 
 @dataclass(frozen=True)
@@ -54,8 +86,20 @@ class SqlKitSalesRepository:
             contact = self._session.get(ContactORM, contact_id)
             if contact is None or contact.company_id != company_id:
                 return None
-        profile = self._session.get(KitProductProfileORM, product_id)
-        return DraftParts(product, profile, company, contact)
+        prof = self._session.get(KitProductProfileORM, product_id)
+        return DraftParts(
+            product_name=product.name,
+            has_profile=prof is not None,
+            specs=prof.specs if prof else "",
+            moq=prof.moq if prof else 0,
+            lead_time_days=prof.lead_time_days if prof else 0,
+            selling_points=tuple(prof.selling_points or []) if prof else (),
+            company_name=company_display_name(company),
+            country=company.country,
+            contact_name=(contact.name or "") if contact else "",
+            contact_email=contact.email if contact else None,
+            do_not_contact=bool(contact and contact.do_not_contact),
+        )
 
     def suppression_dicts(self) -> list[dict[str, Any]]:
         return [
@@ -63,21 +107,33 @@ class SqlKitSalesRepository:
             for s in self._session.scalars(select(SuppressionORM))
         ]
 
-    def save_draft(self, row: KitDraftORM) -> KitDraftORM:
+    def save_draft(
+        self, *, product_id: int, company_id: int, contact_id: int | None, channel: str,
+        subject: str, body: str, source: str, follow_up_on: list[date],
+    ) -> DraftRow:
+        row = KitDraftORM(
+            product_id=product_id, company_id=company_id, contact_id=contact_id,
+            channel=channel, subject=subject, body=body, source=source,
+            follow_up_on=follow_up_on,
+        )
         self._session.add(row)
         self._session.commit()
-        return row
+        return self.get_draft(row.id)  # type: ignore[return-value]
 
-    def list_drafts(self) -> list[tuple[KitDraftORM, str]]:
+    def list_drafts(self) -> list[DraftRow]:
         stmt = (
             select(KitDraftORM, CompanyORM)
             .join(CompanyORM, CompanyORM.id == KitDraftORM.company_id)
             .order_by(KitDraftORM.id.desc())
         )
-        return [(d, company_display_name(c)) for d, c in self._session.execute(stmt)]
+        return [_draft_row(d, company_display_name(c)) for d, c in self._session.execute(stmt)]
 
-    def get_draft(self, draft_id: int) -> KitDraftORM | None:
-        return self._session.get(KitDraftORM, draft_id)
+    def get_draft(self, draft_id: int) -> DraftRow | None:
+        d = self._session.get(KitDraftORM, draft_id)
+        if d is None:
+            return None
+        company = self._session.get(CompanyORM, d.company_id)
+        return _draft_row(d, company_display_name(company) if company else "")
 
     # ---------- 询盘 ----------
 

@@ -51,6 +51,7 @@ select = ["E", "F", "I", "UP", "B", "ASYNC", "S"]
 "tests/**" = ["S101", "S105", "S106", "S311"]
 "tests/infra/test_queries.py" = ["E501"]
 "tests/interface/test_api.py" = ["E501"]
+"tests/interface/test_kit_api.py" = ["E501"]
 
 
 [tool.mypy]

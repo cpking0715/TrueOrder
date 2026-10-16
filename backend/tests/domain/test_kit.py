@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import date
-
 from app.domain.kit import (
     KIT_PAGES,
     KIT_TASKS,
@@ -23,12 +21,13 @@ def test_14_天每天至少一个任务且页面键合法_任务键唯一():
     assert tasks_for_day(8)[0].page == "drafts"
 
 
-def test_当前天数_未开始为1_超期封顶14():
-    start = date(2026, 10, 1)
-    assert current_day(None, start) == 1
-    assert current_day(start, date(2026, 9, 30)) == 1
-    assert current_day(start, date(2026, 10, 3)) == 3
-    assert current_day(start, date(2026, 12, 1)) == 14
+def test_今天是最早有未完成任务的那天_全完成停在14():
+    assert current_day({}) == 1
+    done = {t.key: True for t in KIT_TASKS if t.day <= 2}
+    assert current_day(done) == 3
+    done["d2_pitch"] = False
+    assert current_day(done) == 2
+    assert current_day({t.key: True for t in KIT_TASKS}) == 14
 
 
 def _profile(**kw) -> ProductProfileInput:

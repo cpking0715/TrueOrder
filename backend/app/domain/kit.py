@@ -8,7 +8,6 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from datetime import date
 
 from app.domain.contacts import is_valid_email, normalize_email
 from app.domain.normalize import normalize_company_name, normalize_country
@@ -46,11 +45,12 @@ KIT_DAYS = 14
 TASK_KEYS = frozenset(t.key for t in KIT_TASKS)
 
 
-def current_day(started_on: date | None, today: date) -> int:
-    """出海包第几天（1..14）；未开始按第 1 天算，超期停在第 14 天。"""
-    if started_on is None or today <= started_on:
-        return 1
-    return min((today - started_on).days + 1, KIT_DAYS)
+def current_day(done: Mapping[str, bool]) -> int:
+    """「今天」= 最早还有未完成任务的那一天（自定节奏，不按日历硬推）；全完成停在第 14 天。"""
+    for task in KIT_TASKS:
+        if not done.get(task.key, False):
+            return task.day
+    return KIT_DAYS
 
 
 def tasks_for_day(day: int) -> list[KitTask]:
